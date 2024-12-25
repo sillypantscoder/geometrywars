@@ -7,7 +7,9 @@
 'use strict';
 
 /**
+ * @typedef {Vector2} ThreeVector2
  * @typedef {Camera} ThreeCamera
+ * @typedef {Matrix4} ThreeMatrix4
  */
 
 const THREE = (() => {
@@ -11737,6 +11739,10 @@ const THREE = (() => {
 
 	class Mesh extends Object3D {
 
+		/**
+		 * @param {BufferGeometry} geometry
+		 * @param {Material} material
+		 */
 		constructor( geometry = new BufferGeometry(), material = new MeshBasicMaterial() ) {
 
 			super();
@@ -12596,6 +12602,7 @@ const THREE = (() => {
 			this.isCamera = true;
 
 			this.type = 'Camera';
+			this.isOrthographicCamera = false;
 
 			this.matrixWorldInverse = new Matrix4();
 
@@ -12603,6 +12610,8 @@ const THREE = (() => {
 			this.projectionMatrixInverse = new Matrix4();
 
 			this.coordinateSystem = WebGLCoordinateSystem;
+
+			this.zoom = 1;
 
 		}
 
@@ -12667,7 +12676,6 @@ const THREE = (() => {
 			this.type = 'PerspectiveCamera';
 
 			this.fov = fov;
-			this.zoom = 1;
 
 			this.near = near;
 			this.far = far;
@@ -36762,14 +36770,14 @@ const THREE = (() => {
 	class Controls extends EventDispatcher {
 
 		/**
-		 * @param {Camera} object
+		 * @param {PerspectiveCamera} object
 		 * @param {HTMLElement | null} domElement
 		 */
 		constructor( object, domElement = null ) {
 
 			super();
 
-			/** @type {Camera} */
+			/** @type {PerspectiveCamera} */
 			this.object = object;
 			this.domElement = domElement;
 

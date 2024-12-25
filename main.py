@@ -82,6 +82,14 @@ def get(path: str, query: URLQuery, headers: SafeDict) -> HttpResponse:
 			},
 			"content": read_file("three.js")
 		}
+	elif path == "/OrbitControls.js":
+		return {
+			"status": 200,
+			"headers": {
+				"Content-Type": "text/javascript"
+			},
+			"content": read_file("OrbitControls.js")
+		}
 	elif path == "/index.js":
 		return {
 			"status": 200,

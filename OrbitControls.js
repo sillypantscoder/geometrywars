@@ -149,9 +149,12 @@ const OrbitControls = (() => {
 			this._performCursorZoom = false;
 
 			/**
-			 * @type {PointerEvent[]}
+			 * @type {number[]}
 			 */
 			this._pointers = [];
+			/**
+			 * @type {Object<number, ThreeVector2>}
+			 */
 			this._pointerPositions = {};
 
 			this._controlActive = false;
@@ -180,6 +183,8 @@ const OrbitControls = (() => {
 
 		connect() {
 
+			if (this.domElement == null) throw new Error("dom element is null! You have to specify an element for orbitcontrols")
+
 			this.domElement.addEventListener( 'pointerdown', this.bound.onPointerDown );
 			this.domElement.addEventListener( 'pointercancel', this.bound.onPointerUp );
 
@@ -194,6 +199,8 @@ const OrbitControls = (() => {
 		}
 
 		disconnect() {
+
+			if (this.domElement == null) throw new Error("dom element is null! You have to specify an element for orbitcontrols")
 
 			this.domElement.removeEventListener( 'pointerdown', this.bound.onPointerDown );
 			this.domElement.removeEventListener( 'pointermove', this.onPointerMove.bind(this) );
@@ -552,7 +559,7 @@ const OrbitControls = (() => {
 
 		/**
 		 * @param {number} distance
-		 * @param {any} objectMatrix
+		 * @param {ThreeMatrix4} objectMatrix
 		 */
 		_panLeft( distance, objectMatrix ) {
 
@@ -563,6 +570,10 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {number} distance
+		 * @param {ThreeMatrix4} objectMatrix
+		 */
 		_panUp( distance, objectMatrix ) {
 
 			if ( this.screenSpacePanning === true ) {
@@ -583,9 +594,14 @@ const OrbitControls = (() => {
 		}
 
 		// deltaX and deltaY are in pixels; right and down are positive
+		/**
+		 * @param {number} deltaX
+		 * @param {number} deltaY
+		 */
 		_pan( deltaX, deltaY ) {
 
 			const element = this.domElement;
+			if (element == null) throw new Error("You need to set the element of the orbit controls")
 
 			if ( this.object.isPerspectiveCamera ) {
 
@@ -601,7 +617,7 @@ const OrbitControls = (() => {
 				this._panLeft( 2 * deltaX * targetDistance / element.clientHeight, this.object.matrix );
 				this._panUp( 2 * deltaY * targetDistance / element.clientHeight, this.object.matrix );
 
-			} else if ( this.object.isOrthographicCamera ) {
+			} else if ( this.object.isOrthographicCamera && this.object instanceof THREE.OrthographicCamera ) {
 
 				// orthographic
 				this._panLeft( deltaX * ( this.object.right - this.object.left ) / this.object.zoom / element.clientWidth, this.object.matrix );
@@ -617,6 +633,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {number} dollyScale
+		 */
 		_dollyOut( dollyScale ) {
 
 			if ( this.object.isPerspectiveCamera || this.object.isOrthographicCamera ) {
@@ -632,6 +651,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {number} dollyScale
+		 */
 		_dollyIn( dollyScale ) {
 
 			if ( this.object.isPerspectiveCamera || this.object.isOrthographicCamera ) {
@@ -647,6 +669,10 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {number} x
+		 * @param {number} y
+		 */
 		_updateZoomParameters( x, y ) {
 
 			if ( ! this.zoomToCursor ) {
@@ -654,6 +680,8 @@ const OrbitControls = (() => {
 				return;
 
 			}
+
+			if (this.domElement == null) throw new Error("missing dom element");
 
 			this._performCursorZoom = true;
 
@@ -670,6 +698,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {number} dist
+		 */
 		_clampDistance( dist ) {
 
 			return Math.max( this.minDistance, Math.min( this.maxDistance, dist ) );
@@ -680,12 +711,18 @@ const OrbitControls = (() => {
 		// event callbacks - update the object state
 		//
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		_handleMouseDownRotate( event ) {
 
 			this._rotateStart.set( event.clientX, event.clientY );
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		_handleMouseDownDolly( event ) {
 
 			this._updateZoomParameters( event.clientX, event.clientX );
@@ -693,12 +730,18 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		_handleMouseDownPan( event ) {
 
 			this._panStart.set( event.clientX, event.clientY );
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		_handleMouseMoveRotate( event ) {
 
 			this._rotateEnd.set( event.clientX, event.clientY );
@@ -706,6 +749,7 @@ const OrbitControls = (() => {
 			this._rotateDelta.subVectors( this._rotateEnd, this._rotateStart ).multiplyScalar( this.rotateSpeed );
 
 			const element = this.domElement;
+			if (element == null) throw new Error("cannot handle mouse movement because the element is missing! what are you doing!!!");
 
 			this._rotateLeft( _twoPI * this._rotateDelta.x / element.clientHeight ); // yes, height
 
@@ -717,6 +761,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		_handleMouseMoveDolly( event ) {
 
 			this._dollyEnd.set( event.clientX, event.clientY );
@@ -739,6 +786,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		_handleMouseMovePan( event ) {
 
 			this._panEnd.set( event.clientX, event.clientY );
@@ -753,6 +803,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ clientX: number, clientY: number, deltaY: number }} event
+		 */
 		_handleMouseWheel( event ) {
 
 			this._updateZoomParameters( event.clientX, event.clientY );
@@ -771,7 +824,11 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {KeyboardEvent} event
+		 */
 		_handleKeyDown( event ) {
+			if (this.domElement == null) throw new Error("cannot handle key presses because the element is missing! what are you doing!!!");
 
 			let needsUpdate = false;
 
@@ -883,6 +940,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_handleTouchStartRotate( event ) {
 
 			if ( this._pointers.length === 1 ) {
@@ -902,6 +962,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_handleTouchStartPan( event ) {
 
 			if ( this._pointers.length === 1 ) {
@@ -921,6 +984,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_handleTouchStartDolly( event ) {
 
 			const position = this._getSecondPointerPosition( event );
@@ -934,6 +1000,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_handleTouchStartDollyPan( event ) {
 
 			if ( this.enableZoom ) this._handleTouchStartDolly( event );
@@ -942,6 +1011,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_handleTouchStartDollyRotate( event ) {
 
 			if ( this.enableZoom ) this._handleTouchStartDolly( event );
@@ -950,7 +1022,11 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_handleTouchMoveRotate( event ) {
+			if (this.domElement == null) throw new Error("cannot handle touch movement because the element is missing! what are you doing!!!");
 
 			if ( this._pointers.length == 1 ) {
 
@@ -979,6 +1055,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_handleTouchMovePan( event ) {
 
 			if ( this._pointers.length === 1 ) {
@@ -1004,6 +1083,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_handleTouchMoveDolly( event ) {
 
 			const position = this._getSecondPointerPosition( event );
@@ -1028,6 +1110,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_handleTouchMoveDollyPan( event ) {
 
 			if ( this.enableZoom ) this._handleTouchMoveDolly( event );
@@ -1036,6 +1121,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_handleTouchMoveDollyRotate( event ) {
 
 			if ( this.enableZoom ) this._handleTouchMoveDolly( event );
@@ -1055,6 +1143,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_removePointer( event ) {
 
 			delete this._pointerPositions[ event.pointerId ];
@@ -1072,6 +1163,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		_isTrackingPointer( event ) {
 
 			for ( let i = 0; i < this._pointers.length; i ++ ) {
@@ -1084,6 +1178,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_trackPointer( event ) {
 
 			let position = this._pointerPositions[ event.pointerId ];
@@ -1099,6 +1196,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		_getSecondPointerPosition( event ) {
 
 			const pointerId = ( event.pointerId === this._pointers[ 0 ] ) ? this._pointers[ 1 ] : this._pointers[ 0 ];
@@ -1109,6 +1209,9 @@ const OrbitControls = (() => {
 
 		//
 
+		/**
+		 * @param {WheelEvent} event
+		 */
 		_customWheelEvent( event ) {
 
 			const mode = event.deltaMode;
@@ -1147,6 +1250,7 @@ const OrbitControls = (() => {
 		 * @param {PointerEvent} event
 		 */
 		onPointerDown( event ) {
+			if (this.domElement == null) throw new Error("cannot handle pointer because the element is missing! what are you doing!!!");
 
 			if ( this.enabled === false ) return;
 
@@ -1179,6 +1283,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		onPointerMove( event ) {
 
 			if ( this.enabled === false ) return;
@@ -1195,7 +1302,11 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		onPointerUp( event ) {
+			if (this.domElement == null) throw new Error("cannot handle pointer up because the element is missing! what are you doing!!!");
 
 			this._removePointer( event );
 
@@ -1228,6 +1339,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		onMouseDown( event ) {
 
 			let mouseAction;
@@ -1325,6 +1439,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		onMouseMove( event ) {
 
 			switch ( this.state ) {
@@ -1357,6 +1474,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {WheelEvent} event
+		 */
 		onMouseWheel( event ) {
 
 			if ( this.enabled === false || this.enableZoom === false || this.state !== _STATE.NONE ) return;
@@ -1371,14 +1491,22 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {Event} event
+		 */
 		onKeyDown( event ) {
 
 			if ( this.enabled === false ) return;
+
+			if (! (event instanceof KeyboardEvent)) throw new Error("onKeyDown somehow got a non-keyboard event. you should stop breaking things.");
 
 			this._handleKeyDown( event );
 
 		}
 
+		/**
+		 * @param {{ pointerId: number, pageX: number, pageY: number }} event
+		 */
 		onTouchStart( event ) {
 
 			this._trackPointer( event );
@@ -1463,6 +1591,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {PointerEvent} event
+		 */
 		onTouchMove( event ) {
 
 			this._trackPointer( event );
@@ -1517,6 +1648,9 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {MouseEvent} event
+		 */
 		onContextMenu( event ) {
 
 			if ( this.enabled === false ) return;
@@ -1525,7 +1659,13 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {Event} event
+		 */
 		interceptControlDown( event ) {
+
+			if (! (event instanceof KeyboardEvent)) throw new Error("interceptControlDown somehow got a non-keyboard event. you should stop breaking things.");
+			if (this.domElement == null) throw new Error("you need to set the element for orbit controls");
 
 			if ( event.key === 'Control' ) {
 
@@ -1539,7 +1679,13 @@ const OrbitControls = (() => {
 
 		}
 
+		/**
+		 * @param {Event} event
+		 */
 		interceptControlUp( event ) {
+
+			if (! (event instanceof KeyboardEvent)) throw new Error("interceptControlUp somehow got a non-keyboard event. you should stop breaking things.");
+			if (this.domElement == null) throw new Error("you need to set the element for orbit controls");
 
 			if ( event.key === 'Control' ) {
 
@@ -1547,7 +1693,7 @@ const OrbitControls = (() => {
 
 				const document = this.domElement.getRootNode(); // offscreen canvas compatibility
 
-				document.removeEventListener( 'keyup', this.bound.interceptControlUp, { passive: true, capture: true } );
+				document.removeEventListener( 'keyup', this.bound.interceptControlUp, { capture: true } );
 
 			}
 
