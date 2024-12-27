@@ -7,9 +7,12 @@
 'use strict';
 
 /**
+ * @typedef {Vector3} ThreeVector3
  * @typedef {Vector2} ThreeVector2
+ * @typedef {BufferGeometry} ThreeBufferGeometry
  * @typedef {Camera} ThreeCamera
  * @typedef {Matrix4} ThreeMatrix4
+ * @typedef {Raycaster} ThreeRaycaster
  */
 
 const THREE = (() => {
