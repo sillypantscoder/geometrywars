@@ -71,7 +71,7 @@ document.body.appendChild( renderer.domElement );
 
 /**
  * @param {Line[]} points
- * @returns {ThreeBufferGeometry}
+ * @returns {Float32Array}
  */
 function makeBufferGeometryFromLines(points) {
 	var vertices_array = []
@@ -83,10 +83,7 @@ function makeBufferGeometryFromLines(points) {
 		)
 	}
 	const vertices = new Float32Array(vertices_array);
-	const geometry = new LineSegmentsGeometry( );
-	// itemSize = 3 because there are 3 values (components) per vertex
-	geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
-	return geometry
+	return vertices
 }
 /**
  * @param {Line[]} lines
@@ -94,8 +91,11 @@ function makeBufferGeometryFromLines(points) {
  */
 function createMeshFromLines(lines, color) {
 	var geometry = makeBufferGeometryFromLines(lines)
-	var material = new LineMaterial( { color, linewidth: 5000 } )
-	var mesh = new LineSegments2( geometry, material );
+	var material = new MeshLine.MeshLineMaterial( { color, opacity: 1,
+		lineWidth: 0.1 } )
+	var line = new MeshLine.MeshLine( );
+	line.setPoints(geometry)
+	var mesh = new THREE.Mesh( line.geometry, material )
 	return mesh
 }
 
