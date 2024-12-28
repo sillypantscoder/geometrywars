@@ -93,8 +93,8 @@ function makeBufferGeometryFromLines(points) {
  */
 function createMeshFromLines(lines, color) {
 	var geometry = makeBufferGeometryFromLines(lines)
-	var material = new LineMaterial( { color, linewidth: 5000 } )
-	var mesh = new LineSegments2( geometry, material );
+	var material = new THREE.LineBasicMaterial( { color } )
+	var mesh = new THREE.LineSegments( geometry, material );
 	return mesh
 }
 
@@ -276,7 +276,7 @@ class Player extends LineObject {
 	 */
 	shoot(targetX, targetY) {
 		if (this.shootTime > 0) return
-		this.shootTime = 15;
+		this.shootTime = 20;
 		var diffX = targetX - (window.innerWidth  / 2)
 		var diffY = targetY - (window.innerHeight / 2)
 		var angle = Math.atan2(diffY, diffX)
@@ -336,14 +336,15 @@ class Bullet extends LineObject {
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 		// check for collisions
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
+		var es = [...objects]
+		for (var i = 0; i < es.length; i++) {
+			var e = es[i]
 			if (e instanceof Enemy) {
 				var d = dist(this.pos, e.pos)
 				if (d < 0.75) {
 					this.remove()
 					e.destroy()
-					i -= 1;
+					return;
 				}
 			}
 		}
@@ -370,7 +371,8 @@ class EnemySpawner extends LineObject {
 			var selectedCreator = choice([
 				(x, y) => new BlueDiamond(x, y),
 				(x, y) => new PinkSquares(x, y),
-				(x, y) => new Pinwheel(x, y)
+				(x, y) => new Pinwheel(x, y),
+				(x, y) => new PurpleBox(x, y)
 			])
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
 			newEnemy.spawn()
@@ -447,7 +449,7 @@ class BlueDiamond extends Enemy {
 		}
 		// go towards target
 		var diff = new THREE.Vector2(this.target.mesh.position.x - this.pos.x, this.target.mesh.position.z - this.pos.y)
-		diff = diff.normalize().multiplyScalar(0.01);
+		diff = diff.normalize().multiplyScalar(0.03);
 		this.pos.x += diff.x;
 		this.pos.y += diff.y;
 		// update mesh
@@ -651,6 +653,142 @@ class Pinwheel extends Enemy {
 		super.tick()
 	}
 }
+class PurpleBox extends Enemy {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.vx = 0
+		this.vy = 0
+	}
+	getGeometry() {
+		const S = 2; // half the size of the box (dist. from the center to the edge)
+		const H = 3; // the full height of the box (dist. from the bottom to the top)
+		const M = 0.45; // the height of the smaller square (dist. from the bottom)
+		var outsidePoints = [
+			// outside square
+			{ from: { x: -S, y: 0, z: -S }, to: { x: -S, y: 0, z:  S } },
+			{ from: { x: -S, y: 0, z:  S }, to: { x:  S, y: 0, z:  S } },
+			{ from: { x:  S, y: 0, z:  S }, to: { x:  S, y: 0, z: -S } },
+			{ from: { x:  S, y: 0, z: -S }, to: { x: -S, y: 0, z: -S } }
+		]
+		var points = [
+			// outside square
+			...outsidePoints.map((v) => ({
+				from: { x: v.from.x + S, y: 0, z: v.from.z + S },
+				to:   { x: v.to.x   + S, y: 0, z: v.to.z   + S }
+			})),
+			// inside square
+			...outsidePoints.map((v) => ({
+				from: { x: v.from.x * (1-M), y: H*M, z: v.from.z * (1-M) },
+				to:   { x: v.to.x   * (1-M), y: H*M, z: v.to.z   * (1-M) }
+			})).map((v) => ({
+				from: { x: v.from.x + S, y: v.from.y, z: v.from.z + S },
+				to:   { x: v.to.x   + S, y: v.to.y,   z: v.to.z   + S }
+			})),
+			// diagonal lines
+			...outsidePoints.map((v) => ({
+				from: { x: v.from.x + S, y: 0, z: v.from.z + S },
+				to:   { x:            S, y: H, z:            S }
+			}))
+		]
+		return points
+	}
+	getColor() {
+		return 0x8833FF;
+	}
+	tick() {
+		/** @type {LineObject} */
+		var target = this;
+		var targetDist = 1000000;
+		for (var i = 0; i < objects.length; i++) {
+			if (objects[i] == this) continue;
+			if (! (objects[i] instanceof Player)) continue;
+			var d = dist(this.pos, objects[i].pos)
+			if (d < targetDist) {
+				target = objects[i];
+				targetDist = d;
+			}
+		}
+		var diff = new THREE.Vector2(target.mesh.position.x - this.pos.x, target.mesh.position.z - this.pos.y)
+		diff = diff.normalize().multiplyScalar(0.001);
+		this.vx += diff.x
+		this.vy += diff.y
+		this.vx *= 0.995
+		this.vy *= 0.995
+		// move
+		this.pos.x += this.vx;
+		this.pos.y += this.vy;
+		// bounce
+		if (this.pos.x <= 0) {
+			this.vx = 0
+			this.pos.x = 0
+		}
+		if (this.pos.y <= 0) {
+			this.vy = 0
+			this.pos.y = 0
+		}
+		if (this.pos.x >= BOARD_SIZE) {
+			this.vx = 0
+			this.pos.x = BOARD_SIZE
+		}
+		if (this.pos.y >= BOARD_SIZE) {
+			this.vy = 0
+			this.pos.y = BOARD_SIZE
+		}
+		// set mesh
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+		super.tick()
+	}
+	destroy() {
+		super.destroy()
+		for (var i = 0; i < 3; i++) {
+			var p = new PurpleBoxRemnant(this.pos.x + (Math.random() - 0.5), this.pos.y + (Math.random() - 0.5))
+			p.spawn();
+		}
+	}
+}
+class PurpleBoxRemnant extends Enemy {
+	radius = 1.5
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.mesh.scale.set(0.1, 0.1, 0.1)
+		this.deg = Math.random() * 360
+		this.center = {
+			x: x + (Math.cos(this.deg) * 0.5 * this.radius),
+			y: y + (Math.sin(this.deg) * 0.5 * this.radius)
+		}
+		this.invunTime = 10
+	}
+	getGeometry() {
+		return new PurpleBox(0, 0).getGeometry()
+	}
+	getColor() {
+		return 0x8833FF;
+	}
+	tick() {
+		if (this.invunTime > -0) this.invunTime -= 1;
+		// move
+		this.deg += 0.1
+		this.pos.x = this.center.x + (Math.cos(this.deg) * 0.5 * this.radius)
+		this.pos.y = this.center.y + (Math.sin(this.deg) * 0.5 * this.radius)
+		// set mesh
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+		super.tick()
+	}
+	destroy() {
+		if (this.invunTime <= 0) super.destroy()
+		else this.invunTime -= 1
+	}
+}
 (new Grid(0, 0)).spawn();
 (new EnemySpawner()).spawn();
 (new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
@@ -663,7 +801,6 @@ class Pinwheel extends Enemy {
 // Green square - M 1 1 L 9 1 L 9 9 L 1 9 L 1 1 M 5 1 L 9 5 L 5 9 L 1 5 L 5 1 (copy for front and back, connecting at first 4 points)
 // Orange arrow - M 0 0 L 8 5 L 0 10 L 0 0 M -1 4 L 1 4 L 1 6 L -1 6 L -1 4 (copy and rotate, plus line across center from 0,5 to 8,5)
 
-//  */
 // // Green Square:
 // (() => {
 // 	var frontPoints = [
@@ -909,8 +1046,9 @@ window.addEventListener("keyup", (e) => {
 })
 window.addEventListener("mousemove", (e) => {
 	// find player
-	for (var i = 0; i < objects.length; i++) {
-		var o = objects[i];
+	var s = [...objects]
+	for (var i = 0; i < s.length; i++) {
+		var o = s[i];
 		if (o instanceof Player) {
 			o.shoot(e.clientX, e.clientY)
 		}
