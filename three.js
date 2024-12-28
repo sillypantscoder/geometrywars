@@ -1552,6 +1552,7 @@ const THREE = (() => {
 
 	}
 
+	/** @returns {HTMLCanvasElement} */
 	function createCanvasElement() {
 
 		const canvas = createElementNS( 'canvas' );
@@ -51814,6 +51815,7 @@ const THREE = (() => {
 
 			// public properties
 
+			/** @type {HTMLCanvasElement} */
 			this.domElement = canvas;
 
 			// Debug configuration container

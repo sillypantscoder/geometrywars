@@ -4,10 +4,18 @@
 		<style>
 body {
 	margin: 0;
+	background: black;
+}
+#blurcanvas {
+	position: absolute;
+	filter: blur(15px) brightness(6);
+	pointer-events: none;
+	z-index: -1;
 }
 		</style>
 	</head>
 	<body>
+		<canvas id="blurcanvas"></canvas>
 		<script src="three.js"></script>
 		<script src="OrbitControls.js"></script>
 		<script src="index.js"></script>

@@ -1,14 +1,23 @@
 /**
  * @typedef {{ from: { x: number, y: number, z: number }, to: { x: number, y: number, z: number } }} Line
  * @typedef {'UP' | 'DOWN' | 'LEFT' | 'RIGHT'} Direction
- * @type {Object<Direction, { x: number, y: number }>}
+ * @type {Object<string, { x: number, y: number, sign: boolean }>}
  */
-const Direction = {
-	'UP':    { x: 0, y: -1 },
-	'DOWN':  { x: 0, y:  1 },
-	'LEFT':  { x: -1, y: 0 },
-	'RIGHT': { x:  1, y: 0 }
+const Dir = {
+	'UP':    { x: 0, y: -1, sign: false },
+	'DOWN':  { x: 0, y:  1, sign: true  },
+	'LEFT':  { x: -1, y: 0, sign: false },
+	'RIGHT': { x:  1, y: 0, sign: true  }
 }
+
+const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
+
+/**
+ * @template {any} T
+ * @param {T[]} items
+ * @returns {T}
+ */
+function choice(items) { return items[Math.floor(Math.random()*items.length)]; }
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
@@ -16,7 +25,8 @@ camera.position.x = 0;
 camera.position.y = 5;
 camera.position.z = 0;
 
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ alpha: true });
+renderer.setClearColor( 0x000000, 0 );
 renderer.setSize( window.innerWidth, window.innerHeight );
 document.body.appendChild( renderer.domElement );
 
@@ -122,15 +132,19 @@ class Grid extends Enemy {
 				})
 			}
 		}
-		return lines
+		const M = 10/3;
+		return lines.map((v) => ({
+			from: { x: v.from.x*M, y: v.from.y*M, z: v.from.z*M },
+			to:   { x: v.to.x  *M, y: v.to.y  *M, z: v.to.z  *M }
+		}))
 	}
 	getColor() {
-		return 0x888888;
+		return 0x444444;
 	}
 }
 class PinkSquares extends Enemy {
-	animPhase1Time = 60;
-	animPhase2Time = 120;
+	animPhase1Time = 60*2.5;
+	animPhase2Time = 60*3.5;
 	/**
 	 * @param {number} x
 	 * @param {number} y
@@ -141,6 +155,7 @@ class PinkSquares extends Enemy {
 		this.flipped = false
 		/** @type {Direction} */
 		this.direction = 'UP';
+		this.mesh.position.y = 0.15
 	}
 	getGeometry() {
 		var frontPoints = [
@@ -175,33 +190,74 @@ class PinkSquares extends Enemy {
 	}
 	tick() {
 		this.animTime += 1;
-		if (this.animTime > this.animPhase1Time) {
-			if (Direction[this.direction].x == 0) {
-				// Rotate the mesh
-				this.mesh.rotation.x = this.flipped ? (Math.PI) : 0;
-				this.mesh.rotation.x -= (this.animTime - this.animPhase1Time) * (Math.PI / this.animPhase2Time);
-				// Move the mesh
-				this.mesh.position.z = this.pos.y
-				this.mesh.position.z += (this.animTime - this.animPhase1Time) * (Direction[this.direction].y / this.animPhase2Time)
-			}
+		if (this.animTime == 1) {
+			// new direction
+			this.direction = choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
+			if (this.direction == 'UP' && this.pos.y == 0) this.direction = 'DOWN'
+			if (this.direction == 'LEFT' && this.pos.x == 0) this.direction = 'RIGHT'
 		}
-		if (this.animTime > this.animPhase1Time + this.animPhase2Time) {
-			// reset animation
-			this.animTime = 0;
-			// set new pos
-			this.pos.x += Direction[this.direction].x
-			this.pos.y += Direction[this.direction].y
-			this.flipped = !this.flipped;
-			// Fix rotation
-			this.mesh.rotation.x = this.flipped ? (Math.PI) : 0;
-			this.mesh.rotation.z = 0;
-			this.mesh.position.x = this.pos.x;
-			this.mesh.position.z = this.pos.y;
+		if (this.animTime > this.animPhase1Time) {
+			// run the animation
+			var offsetRotX = 0
+			var offsetRotZ = 0
+			var offsetPosX = 0
+			var offsetPosY = 0
+			var offsetPosZ = 0
+			if (this.animTime < this.animPhase1Time + this.animPhase2Time) {
+				var animProgress = (this.animTime - this.animPhase1Time) / this.animPhase2Time
+				animProgress = ease(animProgress)
+				// Continue the animation
+				if (Dir[this.direction].x == 0) {
+					// Rotate the mesh
+					offsetRotX += animProgress * Math.PI;
+					// Move the mesh
+					offsetPosZ += animProgress * Dir[this.direction].y
+				} else {
+					// Rotate the mesh
+					offsetRotZ += animProgress * Math.PI;
+					// Move the mesh
+					offsetPosX += animProgress * Dir[this.direction].x
+				}
+				// Move up
+				offsetPosY = ((x) => -4*x*(x-1))(animProgress) * 0.3;
+				// fix spin direction
+				var key = (Dir[this.direction].sign ?'T':'F') + (Dir[this.direction].x == 0 ?'T':'F') + (this.flipped ?'T':'F')
+				var shouldReverse = { // I can't figure out how to make this with actual logic so here >:(
+					'TFF': true,
+					'TTT': false,
+					'FTT': true,
+					'TFT': false,
+					'FTF': true,
+					'TTF': false,
+					'FFF': false,
+					'FFT': true
+				}[key]
+				// console.log("key:", key, "reversing:", shouldReverse)
+				// if (shouldReverse == undefined) this.animPhase2Time = 1200
+				// else this.animPhase2Time = this.animPhase1Time = 2
+				if (shouldReverse) {
+					offsetRotX *= -1
+					offsetRotZ *= -1
+				}
+			} else {
+				// reset animation
+				this.animTime = 0;
+				// set new pos
+				this.pos.x += Dir[this.direction].x
+				this.pos.y += Dir[this.direction].y
+				this.flipped = !this.flipped;
+			}
+			this.mesh.rotation.x = (this.flipped ? Math.PI : 0) + offsetRotX;
+			this.mesh.rotation.z = offsetRotZ;
+			this.mesh.position.x = this.pos.x + offsetPosX;
+			this.mesh.position.y = 0.15 + 0.0001 + offsetPosY;
+			this.mesh.position.z = this.pos.y + offsetPosZ;
 		}
 	}
 }
 (new Grid(0, 0)).spawn();
 (new PinkSquares(0, 0)).spawn();
+(new PinkSquares(1, 1)).spawn();
 
 // // Blue Diamond: make a cool looking line thingy
 // (() => {
@@ -262,40 +318,6 @@ class PinkSquares extends Enemy {
 // 	const lines = new THREE.LineSegments( geometry, material );
 // 	scene.add( lines );
 // 	lines.position.set(0, 0, 5);
-// 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
-// // Pink squares:
-// (() => {
-// 	var frontPoints = [
-// 		// top left square
-// 		{ from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 4 } },
-// 		{ from: { x: 0, y: 0, z: 4 }, to: { x: 4, y: 0, z: 4 } },
-// 		{ from: { x: 4, y: 0, z: 4 }, to: { x: 4, y: 0, z: 0 } },
-// 		{ from: { x: 4, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } }
-// 	]
-// 	// bottom right square
-// 	frontPoints.push(...frontPoints.map((v) => ({
-// 		from: { x: v.from.x + 2.5, y: 0, z: v.from.z + 2.5 },
-// 		to:   { x: v.to.x   + 2.5, y: 0, z: v.to.z   + 2.5 }
-// 	})));
-// 	const geometry = makeBufferGeometryFromLines([
-// 		// squares
-// 		...frontPoints,
-// 		// squares but shifted down (2nd copy)
-// 		...frontPoints.map((v) => ({
-// 			from: { x: v.from.x, y: -1.5, z: v.from.z },
-// 			to:   { x: v.to.x,   y: -1.5, z: v.to.z   }
-// 		})),
-// 		// Lines from normal to shifted down
-// 		...frontPoints.map((v) => ({
-// 			from: { x: v.from.x, y: 0,    z: v.from.z },
-// 			to:   { x: v.from.x, y: -1.5, z: v.from.z }
-// 		}))
-// 	]);
-// 	const material = new THREE.LineBasicMaterial( { color: 0xFF11FF, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(2, 0, 2);
 // 	lines.scale.set(0.3, 0.3, 0.3);
 // })();
 // // Black holes:
@@ -524,6 +546,18 @@ class PinkSquares extends Enemy {
 // 	lines.scale.set(0.3, 0.3, 0.3);
 // })();
 
+var blurcanvas = (() => {
+	var c = document.querySelector("#blurcanvas")
+	if (c == null) throw new Error("can't find the blur canvas")
+	if (! (c instanceof HTMLCanvasElement)) throw new Error("blur canvas is not a canvas")
+	c.width = window.innerWidth
+	c.height = window.innerHeight
+	// get context
+	var r = c.getContext('2d')
+	if (r == null) throw new Error("canvas has wrong rendering context...?!")
+	return r
+})();
+
 function animate() {
 	// scene
 	for (var e of [...objects]) {
@@ -531,6 +565,9 @@ function animate() {
 	}
 	// render
 	renderer.render( scene, camera );
+	blurcanvas.fillStyle = "black"
+	blurcanvas.fillRect(0, 0, window.innerWidth, window.innerHeight)
+	blurcanvas.drawImage(renderer.domElement, 0, 0)
 	// Animation loop
 	requestAnimationFrame(animate)
 }

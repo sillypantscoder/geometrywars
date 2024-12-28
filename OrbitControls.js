@@ -32,6 +32,7 @@ const OrbitControls = (() => {
 
 		/**
 		 * @param {ThreeCamera} object
+		 * @param {HTMLCanvasElement | null} domElement
 		 */
 		constructor( object, domElement = null ) {
 
