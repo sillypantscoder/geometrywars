@@ -90,13 +90,29 @@ def get(path: str, query: URLQuery, headers: SafeDict) -> HttpResponse:
 			},
 			"content": read_file("OrbitControls.js")
 		}
-	elif path == "/MeshLine.js":
+	elif path == "/LineSegmentsGeometry.js":
 		return {
 			"status": 200,
 			"headers": {
 				"Content-Type": "text/javascript"
 			},
-			"content": read_file("MeshLine.js")
+			"content": read_file("LineSegmentsGeometry.js")
+		}
+	elif path == "/LineMaterial.js":
+		return {
+			"status": 200,
+			"headers": {
+				"Content-Type": "text/javascript"
+			},
+			"content": read_file("LineMaterial.js")
+		}
+	elif path == "/LineSegments2.js":
+		return {
+			"status": 200,
+			"headers": {
+				"Content-Type": "text/javascript"
+			},
+			"content": read_file("LineSegments2.js")
 		}
 	elif path == "/index.js":
 		return {

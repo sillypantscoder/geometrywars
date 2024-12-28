@@ -7,6 +7,7 @@
 'use strict';
 
 /**
+ * @typedef {Color} ThreeColor
  * @typedef {Vector3} ThreeVector3
  * @typedef {Vector2} ThreeVector2
  * @typedef {BufferGeometry} ThreeBufferGeometry

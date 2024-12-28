@@ -86,17 +86,34 @@ function makeBufferGeometryFromLines(points) {
 	return vertices
 }
 /**
+ * @param {ThreeColor} color
+ * @param {Line[]} lines
+ */
+function makeColorBuffer(color, lines) {
+	var colors_array = []
+	var vertices_array = makeBufferGeometryFromLines(lines)
+	for (var i = 0; i < vertices_array.length; i += 3) {
+		colors_array.push(
+			color.r, color.g, color.b
+		)
+	}
+	const colors = new Float32Array(colors_array);
+	return colors
+}
+/**
  * @param {Line[]} lines
  * @param {number} color
  */
 function createMeshFromLines(lines, color) {
-	var geometry = makeBufferGeometryFromLines(lines)
-	var material = new MeshLine.MeshLineMaterial( { color, opacity: 1,
-		lineWidth: 0.1 } )
-	var line = new MeshLine.MeshLine( );
-	line.setPoints(geometry)
-	var mesh = new THREE.Mesh( line.geometry, material )
-	return mesh
+	const geo = new THREE.BufferGeometry();
+	geo.setAttribute( 'position', new THREE.Float32BufferAttribute( makeBufferGeometryFromLines(lines), 3 ) );
+	geo.setAttribute( 'color', new THREE.Float32BufferAttribute( makeColorBuffer(new THREE.Color(color), lines), 3 ) );
+
+	var matLineBasic = new THREE.LineBasicMaterial( { vertexColors: true, linewidth: 100 } );
+
+	var line1 = new THREE.Line( geo, matLineBasic );
+	line1.computeLineDistances();
+	return line1
 }
 
 /** @type {LineObject[]} */
