@@ -24,7 +24,7 @@ function getArrowKeyVector() {
 	return v;
 }
 
-const BOARD_SIZE = 10;
+const BOARD_SIZE = 50;
 
 /**
  * @template {any} T
@@ -36,7 +36,7 @@ function choice(items) { return items[Math.floor(Math.random()*items.length)]; }
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
 camera.position.x = 0;
-camera.position.y = 8;
+camera.position.y = 15;
 camera.position.z = 0;
 camera.lookAt(camera.position.x, 0, camera.position.z)
 
@@ -99,10 +99,11 @@ class LineObject {
 	 */
 	constructor(x, y) {
 		this.pos = { x, y }
-		var geometry = makeBufferGeometryFromLines(this.getGeometry())
+		this.lines = this.getGeometry()
+		var geometry = makeBufferGeometryFromLines(this.lines)
 		var material = new THREE.LineBasicMaterial( { color: this.getColor(), linewidth: 1000000000000000 } );
 		this.mesh = new THREE.LineSegments( geometry, material );
-		this.mesh.position.set(y, 0, y);
+		this.mesh.position.set(x, 0, y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 	}
 	/** @returns {Line[]} */
@@ -130,6 +131,51 @@ class LineObject {
 	remove() {
 		objects.splice(objects.indexOf(this), 1)
 		scene.remove(this.mesh);
+	}
+	destroy() {
+		this.remove()
+		for (var i = 0; i < this.lines.length; i++) {
+			var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
+			p.spawn()
+		}
+	}
+}
+class DeathParticle extends LineObject {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {Line} line
+	 * @param {number} color
+	 * @param {number} rx
+	 * @param {number} ry
+	 * @param {number} rz
+	 */
+	constructor(x, y, line, color, rx, ry, rz) {
+		super(x, y)
+		this.color = new THREE.Color(color);
+		var geometry = makeBufferGeometryFromLines([line])
+		var material = new THREE.LineBasicMaterial( { color, linewidth: 1000000000000000 } );
+		this.mesh = new THREE.LineSegments( geometry, material );
+		this.mesh.position.set(x, -0.01, y);
+		this.mesh.scale.set(0.3, 0.3, 0.3);
+		this.mesh.rotation.set(rx, ry, rz)
+		this.v = THREE.Vector2.randomUnitVector_KindaBiasedTowardsDiagonals().multiplyScalar(0.05 * Math.random());
+		this.rv = (Math.random() - 0.5) * 0.1;
+		this.a = 1;
+		this.av = 0.001;
+	}
+	getGeometry() { return [] }
+	getColor() { return 0; }
+	tick() {
+		this.mesh.position.x += this.v.x
+		this.mesh.position.z += this.v.y
+		this.mesh.rotation.y += this.rv
+		this.v.multiplyScalar(0.99)
+		this.rv *= 0.99
+		this.a -= this.av;
+		var displayOpacity = 1 - ((this.a - 1) * (this.a - 1));
+		this.mesh.material = new THREE.LineBasicMaterial( { color: this.color.multiplyScalar(displayOpacity) } );
+		if (this.a < 0.7) this.remove()
 	}
 }
 class Grid extends LineObject {
@@ -224,6 +270,17 @@ class Player extends LineObject {
 		var b = new Bullet(this.pos.x, this.pos.y, diffX, diffY)
 		b.spawn()
 	}
+	destroy() {
+		this.remove()
+		for (var n = 0; n < 20; n++) {
+			for (var i = 0; i < this.lines.length; i++) {
+				var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
+				p.spawn()
+				p.v.multiplyScalar(2)
+				p.av *= 0.25;
+			}
+		}
+	}
 }
 class Bullet extends LineObject {
 	/**
@@ -249,13 +306,67 @@ class Bullet extends LineObject {
 		return 0xFF8800;
 	}
 	tick() {
-		this.pos.x += this.directionXY.x * 0.1
-		this.pos.y += this.directionXY.y * 0.1
+		this.pos.x += this.directionXY.x * 0.15
+		this.pos.y += this.directionXY.y * 0.15
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
+		// check for collisions
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (e instanceof Enemy) {
+				var d = dist(this.pos, e.pos)
+				if (d < 0.75) {
+					this.remove()
+					e.destroy()
+					i -= 1;
+				}
+			}
+		}
+		// check for hit walls
+		if (this.pos.x < 0) this.destroy()
+		if (this.pos.y < 0) this.destroy()
+		if (this.pos.x > BOARD_SIZE) this.destroy()
+		if (this.pos.y > BOARD_SIZE) this.destroy()
 	}
 }
-class Enemy extends LineObject {}
+class EnemySpawner extends LineObject {
+	constructor() {
+		super(0, 0)
+		scene.remove(this.mesh);
+		this.time = 0
+	}
+	getGeometry() { return [] }
+	getColor() { return 0 }
+	tick() {
+		this.time += 1
+		if (this.time % 50 == 0) {
+			/** @type {(x: number, y: number) => Enemy} */
+			var selectedCreator = choice([
+				(x, y) => new BlueDiamond(x, y),
+				(x, y) => new PinkSquares(x, y),
+				(x, y) => new Pinwheel(x, y)
+			])
+			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
+			newEnemy.spawn()
+		}
+	}
+}
+class Enemy extends LineObject {
+	tick() {
+		// check for collisions
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (e instanceof Player) {
+				var d = dist(this.pos, e.pos)
+				if (d < 0.75) {
+					this.destroy()
+					e.destroy()
+					i -= 1;
+				}
+			}
+		}
+	}
+}
 class BlueDiamond extends Enemy {
 	/**
 	 * @param {number} x
@@ -314,6 +425,7 @@ class BlueDiamond extends Enemy {
 		// update mesh
 		this.mesh.position.x = this.pos.x;
 		this.mesh.position.z = this.pos.y;
+		super.tick()
 	}
 }
 class PinkSquares extends Enemy {
@@ -429,6 +541,7 @@ class PinkSquares extends Enemy {
 			this.mesh.position.y = 0.15 + 0.0001 + offsetPosY;
 			this.mesh.position.z = this.pos.y + offsetPosZ;
 		}
+		super.tick()
 	}
 }
 class Pinwheel extends Enemy {
@@ -507,15 +620,12 @@ class Pinwheel extends Enemy {
 		// set mesh
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
+		super.tick()
 	}
 }
 (new Grid(0, 0)).spawn();
-(new BlueDiamond(0, 3)).spawn();
-(new BlueDiamond(0, 4)).spawn();
-(new PinkSquares(0, 0)).spawn();
-(new PinkSquares(1, 1)).spawn();
-(new Pinwheel(3, 1)).spawn();
-(new Player(3, 3)).spawn();
+(new EnemySpawner()).spawn();
+(new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
 
 // /*
 // SVG paths for the different enemies:
