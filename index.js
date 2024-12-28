@@ -13,6 +13,17 @@ const Dir = {
 const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
 const dist = (/** @type {{ x: number; y: number; }} */ a, /** @type {{ x: number; y: number; }} */ b) => Math.sqrt(((a.x-b.x)*(a.x-b.x))+((a.y-b.y)*(a.y-b.y)))
 
+/** @type {Set<string>} */
+var keys = new Set()
+function getArrowKeyVector() {
+	var v = new THREE.Vector2(0, 0)
+	if (keys.has("w") || keys.has("ArrowUp")) v.y -= 1;
+	if (keys.has("s") || keys.has("ArrowDown")) v.y += 1;
+	if (keys.has("a") || keys.has("ArrowLeft")) v.x -= 1;
+	if (keys.has("d") || keys.has("ArrowRight")) v.x += 1;
+	return v;
+}
+
 const BOARD_SIZE = 10;
 
 /**
@@ -25,17 +36,18 @@ function choice(items) { return items[Math.floor(Math.random()*items.length)]; }
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
 camera.position.x = 0;
-camera.position.y = 5;
+camera.position.y = 8;
 camera.position.z = 0;
+camera.lookAt(camera.position.x, 0, camera.position.z)
 
 const renderer = new THREE.WebGLRenderer({ alpha: true });
 renderer.setClearColor( 0x000000, 0 );
 renderer.setSize( window.innerWidth, window.innerHeight );
 document.body.appendChild( renderer.domElement );
 
-const controls = new OrbitControls( camera, renderer.domElement );
-controls.target.set(camera.position.x, 0, camera.position.z);
-controls.update();
+// const controls = new OrbitControls( camera, renderer.domElement );
+// controls.target.set(camera.position.x, 0, camera.position.z);
+// controls.update();
 
 // make a cube
 // (() => {
@@ -77,10 +89,10 @@ function makeBufferGeometryFromLines(points) {
 	return geometry
 }
 
-/** @type {Enemy[]} */
+/** @type {LineObject[]} */
 var objects = []
 
-class Enemy {
+class LineObject {
 	/**
 	 * @param {number} x
 	 * @param {number} y
@@ -120,7 +132,7 @@ class Enemy {
 		scene.remove(this.mesh);
 	}
 }
-class Grid extends Enemy {
+class Grid extends LineObject {
 	getGeometry() {
 		var lines = [
 			{
@@ -154,6 +166,96 @@ class Grid extends Enemy {
 		return 0x444444;
 	}
 }
+class Player extends LineObject {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.direction = 0
+		this.shootTime = 0
+	}
+	getGeometry() {
+		return [
+			{ from: { x: -1,   y: 0, z: -1.4 }, to: { x: -1.8, y: 0, z:  0.2 } }, // top left
+			{ from: { x: -1.8, y: 0, z:  0.2 }, to: { x:  0,   y: 0, z:  1.4 } }, // bottom left
+			{ from: { x:  0,   y: 0, z:  1.4 }, to: { x:  1.8, y: 0, z:  0.2 } }, // bottom right
+			{ from: { x:  1.8, y: 0, z:  0.2 }, to: { x:  1,   y: 0, z: -1.4 } }, // top right
+			{ from: { x: -1.6, y: 0, z: -0.2 }, to: { x:  0,   y: 0, z:  0.3 } }, // middle left
+			{ from: { x:  0,   y: 0, z:  0.3 }, to: { x:  1.6, y: 0, z: -0.2 } }  // middle right
+		]
+	}
+	getColor() {
+		return 0xFF8866;
+	}
+	tick() {
+		this.shootTime -= 1
+		// update facing direction
+		var newDirectionVector = getArrowKeyVector().normalize()
+		if (newDirectionVector.length() != 0) {
+			var newDirection = (Math.PI * -0.5) - Math.atan2(newDirectionVector.y, newDirectionVector.x)
+			this.direction = newDirection
+		}
+		newDirectionVector.multiplyScalar(0.04)
+		this.pos.x += newDirectionVector.x
+		this.pos.y += newDirectionVector.y
+		// borders
+		if (this.pos.x <= 0) this.pos.x = 0
+		if (this.pos.x >= BOARD_SIZE) this.pos.x = BOARD_SIZE
+		if (this.pos.y <= 0) this.pos.y = 0
+		if (this.pos.y >= BOARD_SIZE) this.pos.y = BOARD_SIZE
+		// update camera/mesh positions
+		camera.position.x = this.pos.x
+		camera.position.z = this.pos.y
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+		this.mesh.rotation.y = ((this.mesh.rotation.y * 9) + this.direction) / 10
+	}
+	/**
+	 * @param {number} targetX
+	 * @param {number} targetY
+	 */
+	shoot(targetX, targetY) {
+		if (this.shootTime > 0) return
+		this.shootTime = 15;
+		var diffX = targetX - (window.innerWidth  / 2)
+		var diffY = targetY - (window.innerHeight / 2)
+		var b = new Bullet(this.pos.x, this.pos.y, diffX, diffY)
+		b.spawn()
+	}
+}
+class Bullet extends LineObject {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {number} vx
+	 * @param {number} vy
+	 */
+	constructor(x, y, vx, vy) {
+		super(x, y)
+		this.directionXY = new THREE.Vector2(vx, vy).normalize()
+		this.directionRad = (Math.PI * -0.5) - Math.atan2(vy, vx)
+		this.mesh.rotation.y = this.directionRad
+	}
+	getGeometry() {
+		return [
+			{ from: { x: 0,   y: 0, z: 0 }, to: { x: 0.6, y: 0, z: 0 } },
+			{ from: { x: 0.6, y: 0, z: 0 }, to: { x: 0.3, y: 0, z: -1.5 } },
+			{ from: { x: 0.3,   y: 0, z: -1.5 }, to: { x: 0,   y: 0, z: 0 } }
+		]
+	}
+	getColor() {
+		return 0xFF8800;
+	}
+	tick() {
+		this.pos.x += this.directionXY.x * 0.1
+		this.pos.y += this.directionXY.y * 0.1
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+	}
+}
+class Enemy extends LineObject {}
 class BlueDiamond extends Enemy {
 	/**
 	 * @param {number} x
@@ -196,8 +298,7 @@ class BlueDiamond extends Enemy {
 			var targetDist = 1000000;
 			for (var i = 0; i < objects.length; i++) {
 				if (objects[i] == this) continue;
-				if (objects[i] instanceof BlueDiamond) continue;
-				if (objects[i] instanceof Grid) continue;
+				if (! (objects[i] instanceof Player)) continue;
 				var d = dist(this.pos, objects[i].pos)
 				if (d < targetDist) {
 					this.target = objects[i];
@@ -414,6 +515,7 @@ class Pinwheel extends Enemy {
 (new PinkSquares(0, 0)).spawn();
 (new PinkSquares(1, 1)).spawn();
 (new Pinwheel(3, 1)).spawn();
+(new Player(3, 3)).spawn();
 
 // /*
 // SVG paths for the different enemies:
@@ -659,3 +761,20 @@ function animate() {
 	requestAnimationFrame(animate)
 }
 requestAnimationFrame(animate)
+
+// Key listeners
+window.addEventListener("keydown", (e) => {
+	keys.add(e.key)
+})
+window.addEventListener("keyup", (e) => {
+	keys.delete(e.key)
+})
+window.addEventListener("mousemove", (e) => {
+	// find player
+	for (var i = 0; i < objects.length; i++) {
+		var o = objects[i];
+		if (o instanceof Player) {
+			o.shoot(e.clientX, e.clientY)
+		}
+	}
+})
