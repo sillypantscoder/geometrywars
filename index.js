@@ -11,6 +11,9 @@ const Dir = {
 }
 
 const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
+const dist = (/** @type {{ x: number; y: number; }} */ a, /** @type {{ x: number; y: number; }} */ b) => Math.sqrt(((a.x-b.x)*(a.x-b.x))+((a.y-b.y)*(a.y-b.y)))
+
+const BOARD_SIZE = 10;
 
 /**
  * @template {any} T
@@ -119,9 +122,18 @@ class Enemy {
 }
 class Grid extends Enemy {
 	getGeometry() {
-		var lines = []
-		for (var x = 0; x < 10; x++) {
-			for (var y = 0; y < 10; y++) {
+		var lines = [
+			{
+				from: { x: 0,          y: 0, z: BOARD_SIZE },
+				to:   { x: BOARD_SIZE, y: 0, z: BOARD_SIZE }
+			},
+			{
+				from: { x: BOARD_SIZE, y: 0, z: 0          },
+				to:   { x: BOARD_SIZE, y: 0, z: BOARD_SIZE }
+			}
+		]
+		for (var x = 0; x < BOARD_SIZE; x++) {
+			for (var y = 0; y < BOARD_SIZE; y++) {
 				lines.push({
 					from: { x: x,   y: 0, z: y },
 					to:   { x: x+1, y: 0, z: y }
@@ -140,6 +152,67 @@ class Grid extends Enemy {
 	}
 	getColor() {
 		return 0x444444;
+	}
+}
+class BlueDiamond extends Enemy {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.switchTime = 0;
+		/** @type {Enemy} */
+		this.target = this;
+	}
+	getGeometry() {
+		const R = 2.5;
+		var outsidePoints = [
+			// outline
+			{ from: { x:    0, z: -R }, to: { x: .5*R, z:  0 } }, // (top right)
+			{ from: { x: .5*R, z:  0 }, to: { x:    0, z:  R } }, // (bottom right)
+			{ from: { x:    0, z:  R }, to: { x:-.5*R, z:  0 } }, // (bottom left)
+			{ from: { x:-.5*R, z:  0 }, to: { x:    0, z: -R } }  // (top left)
+		]
+		const P = 0.8;
+		return [
+			...outsidePoints.map((v) => ({
+				from: { x: v.from.x, y: 0, z: v.from.z },
+				to:   { x: v.to.x,   y: 0, z: v.to.z   }
+			})),
+			...outsidePoints.map((v) => ({
+				from: { x: v.from.x*P, y: 0, z: v.from.z*P },
+				to:   { x: v.to.x * P, y: 0, z: v.to.z * P }
+			}))
+		]
+	}
+	getColor() {
+		return 0x6688FF;
+	}
+	tick() {
+		if ((this.switchTime -= 1) <= 0) {
+			this.switchTime = 5;
+			this.target = this;
+			var targetDist = 1000000;
+			for (var i = 0; i < objects.length; i++) {
+				if (objects[i] == this) continue;
+				if (objects[i] instanceof BlueDiamond) continue;
+				if (objects[i] instanceof Grid) continue;
+				var d = dist(this.pos, objects[i].pos)
+				if (d < targetDist) {
+					this.target = objects[i];
+					targetDist = d;
+				}
+			}
+		}
+		// go towards target
+		var diff = new THREE.Vector2(this.target.mesh.position.x - this.pos.x, this.target.mesh.position.z - this.pos.y)
+		diff = diff.normalize().multiplyScalar(0.01);
+		this.pos.x += diff.x;
+		this.pos.y += diff.y;
+		// update mesh
+		this.mesh.position.x = this.pos.x;
+		this.mesh.position.z = this.pos.y;
 	}
 }
 class PinkSquares extends Enemy {
@@ -195,6 +268,8 @@ class PinkSquares extends Enemy {
 			this.direction = choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
 			if (this.direction == 'UP' && this.pos.y == 0) this.direction = 'DOWN'
 			if (this.direction == 'LEFT' && this.pos.x == 0) this.direction = 'RIGHT'
+			if (this.direction == 'DOWN' && this.pos.y >= BOARD_SIZE) this.direction = 'UP'
+			if (this.direction == 'RIGHT' && this.pos.x >= BOARD_SIZE) this.direction = 'LEFT'
 		}
 		if (this.animTime > this.animPhase1Time) {
 			// run the animation
@@ -255,31 +330,91 @@ class PinkSquares extends Enemy {
 		}
 	}
 }
+class Pinwheel extends Enemy {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.spinDirection = Math.random() < 0.5 ? -1 : 1
+		this.direction = THREE.Vector2.randomUnitVector_KindaBiasedTowardsDiagonals()
+	}
+	getGeometry() {
+		const DEG2RAD = Math.PI / 180;
+		const insideRad = 0.2;
+		const outsideRad = 1.6;
+		/**
+		 * Indicates which direction the pinwheel faces.
+		 */
+		const D = Math.random() < 0.5 ? -1 : 1
+		const getCirclePoint = (/** @type {number} */ rot, /** @type {number} */ radius) => {
+			var rad = DEG2RAD * rot * 360;
+			var x = Math.cos(rad) * radius
+			var y = Math.sin(rad) * radius
+			return { x: x, y: 0, z: y }
+		}
+		var lines = []
+		// Go through the circle
+		for (var i = 0; i < 8; i++) {
+			// Inner circle line
+			lines.push({
+				from: getCirclePoint( i   /8,   insideRad),
+				to:   getCirclePoint((i+1)/8, insideRad)
+			})
+			// Outside fan
+			if (i % 2 == 0) {
+				// Line out from center
+				lines.push({
+					from: getCirclePoint(i / 8, insideRad),
+					to:   getCirclePoint(i / 8, outsideRad)
+				})
+				// Line across
+				lines.push({
+					from: getCirclePoint( i   /8, outsideRad),
+					to:   getCirclePoint((i+D)/8, outsideRad*Math.SQRT2)
+				})
+				// Line back in diagonally
+				lines.push({
+					from: getCirclePoint((i+D)/8, outsideRad*Math.SQRT2),
+					to:   getCirclePoint((i+D)/8, insideRad)
+				})
+			}
+		}
+		return lines
+	}
+	getColor() {
+		return 0x8833FF;
+	}
+	tick() {
+		this.mesh.rotation.y += 0.03 * this.spinDirection;
+		this.pos.x += this.direction.x * 0.01;
+		this.pos.y += this.direction.y * 0.01;
+		// bounce
+		if (this.pos.x <= 0) {
+			this.direction.x = Math.abs(this.direction.x)
+		}
+		if (this.pos.y <= 0) {
+			this.direction.y = Math.abs(this.direction.y)
+		}
+		if (this.pos.x >= BOARD_SIZE) {
+			this.direction.x = -Math.abs(this.direction.x)
+		}
+		if (this.pos.y >= BOARD_SIZE) {
+			this.direction.y = -Math.abs(this.direction.y)
+		}
+		// set mesh
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+	}
+}
 (new Grid(0, 0)).spawn();
+(new BlueDiamond(0, 3)).spawn();
+(new BlueDiamond(0, 4)).spawn();
 (new PinkSquares(0, 0)).spawn();
 (new PinkSquares(1, 1)).spawn();
+(new Pinwheel(3, 1)).spawn();
 
-// // Blue Diamond: make a cool looking line thingy
-// (() => {
-// 	const geometry = makeBufferGeometryFromLines([
-// 		// outline
-// 		{ from: { x:   0, y: 0, z:   0 }, to: { x:   6, y: 0, z:   0 } },
-// 		{ from: { x:   6, y: 0, z:   0 }, to: { x:  10, y: 0, z:   6 } },
-// 		{ from: { x:  10, y: 0, z:   6 }, to: { x:   4, y: 0, z:   6 } },
-// 		{ from: { x:   4, y: 0, z:   6 }, to: { x:   0, y: 0, z:   0 } },
-// 		// top/bottom sides
-// 		{ from: { x:  .4, y: 0, z:  .6 }, to: { x: 6.4, y: 0, z:  .6 } },
-// 		{ from: { x: 3.6, y: 0, z: 5.4 }, to: { x: 9.6, y: 0, z: 5.4 } },
-// 		// left/right sides
-// 		{ from: { x: 1.2, y: 0, z: 0.6 }, to: { x: 4.4, y: 0, z: 5.4 } },
-// 		{ from: { x: 5.6, y: 0, z: 0.6 }, to: { x: 8.8, y: 0, z: 5.4 } }
-// 	]);
-// 	const material = new THREE.LineBasicMaterial( { color: 0x6688FF, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(5, 0, 0);
-// 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
 // /*
 // SVG paths for the different enemies:
 // Blue diamond - M 0 0 L 6 0 L 10 6 L 4 6 Z M 0.4 0.6 L 6.4 0.6 M 3.6 5.4 L 9.6 5.4 M 1.2 0.6 L 4.4 5.4 M 5.6 0.6 L 8.8 5.4
@@ -407,54 +542,6 @@ class PinkSquares extends Enemy {
 // 	const lines = new THREE.LineSegments( geometry, material );
 // 	scene.add( lines );
 // 	lines.position.set(-3, 0, 3);
-// 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
-// // Pinwheel:
-// function generatePinwheelPoints() {
-// 	const DEG2RAD = Math.PI / 180;
-// 	const insideRad = 0.5;
-// 	const outsideRad = 4;
-// 	const getCirclePoint = (/** @type {number} */ rot, /** @type {number} */ radius) => {
-// 		var rad = DEG2RAD * rot * 360;
-// 		var x = Math.cos(rad) * radius
-// 		var y = Math.sin(rad) * radius
-// 		return { x: x + outsideRad, y: 0, z: y + outsideRad }
-// 	}
-// 	var lines = []
-// 	// Go through the circle
-// 	for (var i = 0; i < 8; i++) {
-// 		// Inner circle line
-// 		lines.push({
-// 			from: getCirclePoint( i   /8,   insideRad),
-// 			to:   getCirclePoint((i+1)/8, insideRad)
-// 		})
-// 		// Outside fan
-// 		if (i % 2 == 0) {
-// 			// Line out from center
-// 			lines.push({
-// 				from: getCirclePoint(i / 8, insideRad),
-// 				to:   getCirclePoint(i / 8, outsideRad)
-// 			})
-// 			// Line across
-// 			lines.push({
-// 				from: getCirclePoint( i   /8, outsideRad),
-// 				to:   getCirclePoint((i+1)/8, outsideRad*Math.SQRT2)
-// 			})
-// 			// Line back in diagonally
-// 			lines.push({
-// 				from: getCirclePoint((i+1)/8, outsideRad*Math.SQRT2),
-// 				to:   getCirclePoint((i+1)/8, insideRad)
-// 			})
-// 		}
-// 	}
-// 	return lines
-// }
-// (() => {
-// 	const geometry = makeBufferGeometryFromLines(generatePinwheelPoints());
-// 	const material = new THREE.LineBasicMaterial( { color: 0x8833FF, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(2, 0, -3);
 // 	lines.scale.set(0.3, 0.3, 0.3);
 // })();
 // // Purple boxes:

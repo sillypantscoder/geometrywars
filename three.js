@@ -1125,6 +1125,10 @@ const THREE = (() => {
 
 		}
 
+		static randomUnitVector_KindaBiasedTowardsDiagonals() {
+			return (new Vector2(Math.random()-0.5, Math.random()-0.5)).normalize()
+		}
+
 	}
 
 	class Matrix3 {
