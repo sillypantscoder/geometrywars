@@ -375,9 +375,62 @@ class EnemySpawner extends LineObject {
 				(x, y) => new PurpleBox(x, y)
 			])
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
-			newEnemy.spawn()
+			var spawning = new Spawning(newEnemy)
+			spawning.spawn()
 			this.every *= 0.99
 			this.time = 0
+		}
+	}
+}
+class Spawning extends LineObject {
+	static spawnTime = 30;
+	/**
+	 * @param {Enemy} enemy
+	 */
+	constructor(enemy) {
+		super(enemy.pos.x, enemy.pos.y)
+		this.enemy = enemy
+		// update mesh
+		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
+		this.mesh.position.set(this.pos.x, 0, this.pos.y);
+		this.mesh.scale.set(0.3, 0.3, 0.3);
+		// time
+		this.time = 0
+	}
+	getGeometry() { return []; }
+	getColor() { return 0; }
+	tick() {
+		if (this.time == Spawning.spawnTime*4) {
+			this.enemy.spawn();
+			this.remove();
+		} else if (this.time % Spawning.spawnTime == 0) {
+			(new SpawnWarning(this.enemy)).spawn();
+		}
+		this.time += 1;
+	}
+}
+class SpawnWarning extends LineObject {
+	/**
+	 * @param {Enemy} enemy
+	 */
+	constructor(enemy) {
+		super(enemy.pos.x, enemy.pos.y)
+		this.enemy = enemy
+		// update mesh
+		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
+		this.mesh.position.set(this.pos.x, 0, this.pos.y);
+		this.mesh.scale.set(0.3, 0.3, 0.3);
+		// time
+		this.time = 0
+	}
+	getGeometry() { return []; }
+	getColor() { return 0; }
+	tick() {
+		this.time += 1;
+		var scale = 0.3 + ((0.3 / Spawning.spawnTime) * this.time)
+		this.mesh.scale.set(scale, scale, scale);
+		if (this.time >= Spawning.spawnTime) {
+			this.remove()
 		}
 	}
 }
@@ -676,22 +729,16 @@ class PurpleBox extends Enemy {
 		]
 		var points = [
 			// outside square
-			...outsidePoints.map((v) => ({
-				from: { x: v.from.x + S, y: 0, z: v.from.z + S },
-				to:   { x: v.to.x   + S, y: 0, z: v.to.z   + S }
-			})),
+			...outsidePoints,
 			// inside square
 			...outsidePoints.map((v) => ({
 				from: { x: v.from.x * (1-M), y: H*M, z: v.from.z * (1-M) },
 				to:   { x: v.to.x   * (1-M), y: H*M, z: v.to.z   * (1-M) }
-			})).map((v) => ({
-				from: { x: v.from.x + S, y: v.from.y, z: v.from.z + S },
-				to:   { x: v.to.x   + S, y: v.to.y,   z: v.to.z   + S }
 			})),
 			// diagonal lines
 			...outsidePoints.map((v) => ({
-				from: { x: v.from.x + S, y: 0, z: v.from.z + S },
-				to:   { x:            S, y: H, z:            S }
+				from: { x: v.from.x, y: 0, z: v.from.z },
+				to:   { x:         0, y: H, z:         0 }
 			}))
 		]
 		return points
