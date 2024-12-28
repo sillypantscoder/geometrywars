@@ -24,7 +24,7 @@ function getArrowKeyVector() {
 	return v;
 }
 
-const BOARD_SIZE = 50;
+const BOARD_SIZE = 30;
 
 /**
  * @template {any} T
@@ -74,7 +74,6 @@ document.body.appendChild( renderer.domElement );
  * @returns {ThreeBufferGeometry}
  */
 function makeBufferGeometryFromLines(points) {
-	const geometry = new THREE.BufferGeometry( );
 	var vertices_array = []
 	for (var i = 0; i < points.length; i++) {
 		var p = points[i]
@@ -84,9 +83,20 @@ function makeBufferGeometryFromLines(points) {
 		)
 	}
 	const vertices = new Float32Array(vertices_array);
+	const geometry = new LineSegmentsGeometry( );
 	// itemSize = 3 because there are 3 values (components) per vertex
 	geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
 	return geometry
+}
+/**
+ * @param {Line[]} lines
+ * @param {number} color
+ */
+function createMeshFromLines(lines, color) {
+	var geometry = makeBufferGeometryFromLines(lines)
+	var material = new LineMaterial( { color, linewidth: 5000 } )
+	var mesh = new LineSegments2( geometry, material );
+	return mesh
 }
 
 /** @type {LineObject[]} */
@@ -100,9 +110,7 @@ class LineObject {
 	constructor(x, y) {
 		this.pos = { x, y }
 		this.lines = this.getGeometry()
-		var geometry = makeBufferGeometryFromLines(this.lines)
-		var material = new THREE.LineBasicMaterial( { color: this.getColor(), linewidth: 1000000000000000 } );
-		this.mesh = new THREE.LineSegments( geometry, material );
+		this.mesh = createMeshFromLines(this.lines, this.getColor())
 		this.mesh.position.set(x, 0, y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 	}
@@ -153,9 +161,7 @@ class DeathParticle extends LineObject {
 	constructor(x, y, line, color, rx, ry, rz) {
 		super(x, y)
 		this.color = new THREE.Color(color);
-		var geometry = makeBufferGeometryFromLines([line])
-		var material = new THREE.LineBasicMaterial( { color, linewidth: 1000000000000000 } );
-		this.mesh = new THREE.LineSegments( geometry, material );
+		this.mesh = createMeshFromLines([line], color)
 		this.mesh.position.set(x, -0.01, y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 		this.mesh.rotation.set(rx, ry, rz)
@@ -182,34 +188,41 @@ class Grid extends LineObject {
 	getGeometry() {
 		var lines = [
 			{
-				from: { x: 0,          y: 0, z: BOARD_SIZE },
-				to:   { x: BOARD_SIZE, y: 0, z: BOARD_SIZE }
+				from: { x: -1, z: -1 },
+				to:   { x:  1, z: -1 }
 			},
 			{
-				from: { x: BOARD_SIZE, y: 0, z: 0          },
-				to:   { x: BOARD_SIZE, y: 0, z: BOARD_SIZE }
+				from: { x: -1, z: -1 },
+				to:   { x: -1, z:  1 }
+			},
+			{
+				from: { x:  1, z:  1 },
+				to:   { x:  1, z: -1 }
+			},
+			{
+				from: { x:  1, z:  1 },
+				to:   { x: -1, z:  1 }
 			}
 		]
-		for (var x = 0; x < BOARD_SIZE; x++) {
-			for (var y = 0; y < BOARD_SIZE; y++) {
-				lines.push({
-					from: { x: x,   y: 0, z: y },
-					to:   { x: x+1, y: 0, z: y }
-				})
-				lines.push({
-					from: { x: x, y: 0, z: y   },
-					to:   { x: x, y: 0, z: y+1 }
-				})
-			}
-		}
+		const P = 0.2
+		lines = [
+			...lines.map((v) => ({
+				from: { x: v.from.x <0 ? 0 : BOARD_SIZE, z: v.from.z <0 ? 0 : BOARD_SIZE },
+				to:   { x: v.to.x   <0 ? 0 : BOARD_SIZE, z: v.to.z   <0 ? 0 : BOARD_SIZE }
+			})),
+			...lines.map((v) => ({
+				from: { x: v.from.x <0 ? -P : BOARD_SIZE+P, z: v.from.z <0 ? -P : BOARD_SIZE+P },
+				to:   { x: v.to.x   <0 ? -P : BOARD_SIZE+P, z: v.to.z   <0 ? -P : BOARD_SIZE+P }
+			}))
+		]
 		const M = 10/3;
 		return lines.map((v) => ({
-			from: { x: v.from.x*M, y: v.from.y*M, z: v.from.z*M },
-			to:   { x: v.to.x  *M, y: v.to.y  *M, z: v.to.z  *M }
+			from: { x: v.from.x*M, y: 0, z: v.from.z*M },
+			to:   { x: v.to.x  *M, y: 0, z: v.to.z  *M }
 		}))
 	}
 	getColor() {
-		return 0x444444;
+		return 0xFFFFFF;
 	}
 }
 class Player extends LineObject {
@@ -267,8 +280,11 @@ class Player extends LineObject {
 		this.shootTime = 15;
 		var diffX = targetX - (window.innerWidth  / 2)
 		var diffY = targetY - (window.innerHeight / 2)
-		var b = new Bullet(this.pos.x, this.pos.y, diffX, diffY)
-		b.spawn()
+		var angle = Math.atan2(diffY, diffX)
+		for (var bulletAngle of [angle - 0.08, angle, angle + 0.08]) {
+			var b = new Bullet(this.pos.x, this.pos.y, Math.cos(bulletAngle), Math.sin(bulletAngle))
+			b.spawn()
+		}
 	}
 	destroy() {
 		this.remove()
@@ -279,6 +295,16 @@ class Player extends LineObject {
 				p.v.multiplyScalar(2)
 				p.av *= 0.25;
 			}
+		}
+	}
+	remove() {
+		super.remove()
+		// destroy everything
+		for (var i = 0; i < objects.length; i++) {
+			if (objects[i] instanceof Grid) continue;
+			if (objects[i] instanceof DeathParticle) continue;
+			objects[i].destroy();
+			i -= 1;
 		}
 	}
 }
@@ -334,12 +360,13 @@ class EnemySpawner extends LineObject {
 		super(0, 0)
 		scene.remove(this.mesh);
 		this.time = 0
+		this.every = 70
 	}
 	getGeometry() { return [] }
 	getColor() { return 0 }
 	tick() {
 		this.time += 1
-		if (this.time % 50 == 0) {
+		if (this.time >= this.every) {
 			/** @type {(x: number, y: number) => Enemy} */
 			var selectedCreator = choice([
 				(x, y) => new BlueDiamond(x, y),
@@ -348,6 +375,8 @@ class EnemySpawner extends LineObject {
 			])
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
 			newEnemy.spawn()
+			this.every *= 0.99
+			this.time = 0
 		}
 	}
 }
@@ -387,7 +416,7 @@ class BlueDiamond extends Enemy {
 			{ from: { x:    0, z:  R }, to: { x:-.5*R, z:  0 } }, // (bottom left)
 			{ from: { x:-.5*R, z:  0 }, to: { x:    0, z: -R } }  // (top left)
 		]
-		const P = 0.8;
+		const P = 0.6;
 		return [
 			...outsidePoints.map((v) => ({
 				from: { x: v.from.x, y: 0, z: v.from.z },
@@ -400,7 +429,7 @@ class BlueDiamond extends Enemy {
 		]
 	}
 	getColor() {
-		return 0x6688FF;
+		return 0x6699CC;
 	}
 	tick() {
 		if ((this.switchTime -= 1) <= 0) {
@@ -479,8 +508,8 @@ class PinkSquares extends Enemy {
 		if (this.animTime == 1) {
 			// new direction
 			this.direction = choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
-			if (this.direction == 'UP' && this.pos.y == 0) this.direction = 'DOWN'
-			if (this.direction == 'LEFT' && this.pos.x == 0) this.direction = 'RIGHT'
+			if (this.direction == 'UP' && this.pos.y <= 0) this.direction = 'DOWN'
+			if (this.direction == 'LEFT' && this.pos.x <= 0) this.direction = 'RIGHT'
 			if (this.direction == 'DOWN' && this.pos.y >= BOARD_SIZE) this.direction = 'UP'
 			if (this.direction == 'RIGHT' && this.pos.x >= BOARD_SIZE) this.direction = 'LEFT'
 		}

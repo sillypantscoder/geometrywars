@@ -10,9 +10,14 @@
  * @typedef {Vector3} ThreeVector3
  * @typedef {Vector2} ThreeVector2
  * @typedef {BufferGeometry} ThreeBufferGeometry
+ * @typedef {WireframeGeometry} ThreeWireframeGeometry
+ * @typedef {EdgesGeometry} ThreeEdgesGeometry
+ * @typedef {Mesh} ThreeMesh
  * @typedef {Camera} ThreeCamera
  * @typedef {Matrix4} ThreeMatrix4
  * @typedef {Raycaster} ThreeRaycaster
+ * @typedef {Ray} ThreeRay
+ * @typedef {Renderer} ThreeRenderer
  */
 
 const THREE = (() => {
@@ -9256,6 +9261,9 @@ const THREE = (() => {
 
 			super();
 
+			/** @type {any} */
+			this.uniforms = null
+
 			this.isMaterial = true;
 
 			Object.defineProperty( this, 'id', { value: _materialId ++ } );
@@ -10656,6 +10664,7 @@ const THREE = (() => {
 
 			this.index = null;
 			this.indirect = null;
+			/** @type {Object<string, any>} */
 			this.attributes = {};
 
 			this.morphAttributes = {};
@@ -11759,6 +11768,7 @@ const THREE = (() => {
 
 			this.type = 'Mesh';
 
+			/** @type {InstancedBufferGeometry} */
 			this.geometry = geometry;
 			this.material = material;
 
@@ -12433,7 +12443,9 @@ const THREE = (() => {
 
 			this.type = 'ShaderMaterial';
 
+			/** @type {{ WORLD_UNITS: undefined | string, USE_DASH: undefined | string, USE_ALPHA_TO_COVERAGE: undefined | string }} */
 			this.defines = {};
+			/** @type {{ diffuse: any, linewidth: any, dashScale: any, dashSize: any, dashOffset: any, gapSize: any, opacity: any, resolution: any }} */
 			this.uniforms = {};
 			this.uniformsGroups = [];
 
@@ -37980,6 +37992,18 @@ const THREE = (() => {
 			alphaMap: { value: null },
 			alphaMapTransform: { value: /*@__PURE__*/ new Matrix3() },
 			alphaTest: { value: 0 }
+
+		},
+
+		line: {
+
+			worldUnits: { value: 1 },
+			linewidth: { value: 1 },
+			resolution: { value: new Vector2( 1, 1 ) },
+			dashOffset: { value: 0 },
+			dashScale: { value: 1 },
+			dashSize: { value: 1 },
+			gapSize: { value: 1 } // todo FIX - maybe change to totalSize
 
 		}
 
