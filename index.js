@@ -1,17 +1,18 @@
 /**
  * @typedef {{ from: { x: number, y: number, z: number }, to: { x: number, y: number, z: number } }} Line
  * @typedef {'UP' | 'DOWN' | 'LEFT' | 'RIGHT'} Direction
- * @type {Object<string, { x: number, y: number, sign: boolean }>}
+ * @type {Object<string, { x: number, y: number, sign: boolean, vector: ThreeVector2 }>}
  */
 const Dir = {
-	'UP':    { x: 0, y: -1, sign: false },
-	'DOWN':  { x: 0, y:  1, sign: true  },
-	'LEFT':  { x: -1, y: 0, sign: false },
-	'RIGHT': { x:  1, y: 0, sign: true  }
+	'UP':    { x: 0, y: -1, sign: false, vector: new THREE.Vector2( 0,-1) },
+	'DOWN':  { x: 0, y:  1, sign: true,  vector: new THREE.Vector2( 0, 1) },
+	'LEFT':  { x: -1, y: 0, sign: false, vector: new THREE.Vector2(-1, 0) },
+	'RIGHT': { x:  1, y: 0, sign: true,  vector: new THREE.Vector2( 1, 0) }
 }
 
 const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
 const dist = (/** @type {{ x: number; y: number; }} */ a, /** @type {{ x: number; y: number; }} */ b) => Math.sqrt(((a.x-b.x)*(a.x-b.x))+((a.y-b.y)*(a.y-b.y)))
+const mapN = (/** @type {number} */ x, /** @type {number} */ min1, /** @type {number} */ max1, /** @type {number} */ min2, /** @type {number} */ max2) => ((x - min1) * (max2 - min2)) / (max1 - min1) + min2;
 
 /** @type {Set<string>} */
 var keys = new Set()
@@ -386,6 +387,8 @@ class EnemySpawner extends LineObject {
 				(x, y) => new PinkSquares(x, y),
 				(x, y) => new Pinwheel(x, y),
 				(x, y) => new Pinwheel(x, y),
+				(x, y) => new OrangeArrow(x, y, choice(Object.values(Dir)).vector),
+				(x, y) => new OrangeArrow(x, y, choice(Object.values(Dir)).vector),
 				(x, y) => new PurpleBox(x, y)
 			])
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
@@ -408,6 +411,7 @@ class Spawning extends LineObject {
 		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.set(this.pos.x, 0, this.pos.y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
+		this.mesh.rotation.y = enemy.mesh.rotation.y
 		// time
 		this.time = 0
 	}
@@ -434,6 +438,7 @@ class SpawnWarning extends LineObject {
 		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.set(this.pos.x, 0, this.pos.y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
+		this.mesh.rotation.y = enemy.mesh.rotation.y
 		// time
 		this.time = 0
 	}
@@ -489,10 +494,7 @@ class Rice extends LineObject {
 		this.pos.y += this.vy * 0.01;
 		// time
 		this.time += 1
-		if (this.time >= 200) {
-			this.mesh.visible = this.time % 2 == 0
-		}
-		if (this.time >= 300) {
+		if (this.time >= 450) {
 			this.destroy(false)
 		}
 		// update mesh
@@ -525,8 +527,8 @@ class RiceCollection extends Rice {
 		var targetY = this.target.pos.y;
 		var progress = this.time / this.maxTime
 		progress = progress * progress;
-		var frameX = this.pos.x + ((targetX - this.pos.x) * progress)
-		var frameY = this.pos.y + ((targetY - this.pos.y) * progress)
+		var frameX = mapN(progress, 0, 1, this.pos.x, targetX)
+		var frameY = mapN(progress, 0, 1, this.pos.y, targetY)
 		// update mesh
 		this.mesh.position.x = frameX;
 		this.mesh.position.z = frameY;
@@ -815,6 +817,108 @@ class Pinwheel extends Enemy {
 		super.tick()
 	}
 }
+class OrangeArrow extends Enemy {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {ThreeVector2} direction
+	 */
+	constructor(x, y, direction) {
+		super(x, y)
+		/** @type {ThreeVector2} */
+		this.direction = direction.normalize()
+		/** @type {ThreeVector3} */
+		this.posOriginal = new THREE.Vector3(x, 0, y)
+		/** @type {ThreeVector3} */
+		this.posTarget = this.getTargetPos()
+		this.time = 0
+		this.maxTime = this.getMaxTime()
+		this.axisRotation = 0
+		// update rotation
+		this.updateRotation()
+	}
+	getGeometry() {
+		var planePoints = [
+			// arrow
+			{ from: { x: -1.5, y: 0, z: -2.5 }, to: { x:  2.5, y: 0, z:  0   } },
+			{ from: { x:  2.5, y: 0, z:  0   }, to: { x: -1.5, y: 0, z:  2.5 } },
+			{ from: { x: -1.5, y: 0, z:  2.5 }, to: { x: -1.5, y: 0, z: -2.5 } },
+			// box
+			{ from: { x: -2, y: 0, z: -0.5 }, to: { x: -1, y: 0, z: -0.5 } },
+			{ from: { x: -1, y: 0, z: -0.5 }, to: { x: -1, y: 0, z:  0.5 } },
+			{ from: { x: -1, y: 0, z:  0.5 }, to: { x: -2, y: 0, z:  0.5 } },
+			{ from: { x: -2, y: 0, z:  0.5 }, to: { x: -2, y: 0, z: -0.5 } }
+		]
+		return [
+			...planePoints,
+			...planePoints.map((v) => ({
+				from: { x: v.from.x, y: v.from.z, z: 0 },
+				to:   { x: v.to.x,   y: v.to.z,   z: 0 }
+			})),
+			{
+				from: { x: -1.5, y: 0, z: 0 },
+				to:   { x:  2.5, y: 0, z: 0 }
+			}
+		];
+	}
+	getColor() {
+		return 0xFF8800;
+	}
+	/** @returns {ThreeVector3} */
+	getTargetPos() {
+		var box = new THREE.Box3(
+			new THREE.Vector3(0, -1, 0),
+			new THREE.Vector3(BOARD_SIZE, 1, BOARD_SIZE)
+		)
+		var ray = new THREE.Ray(
+			new THREE.Vector3(this.posOriginal.x, 0, this.posOriginal.z),
+			new THREE.Vector3(this.direction.x,   0, this.direction.y  )
+		)
+		ray.set(
+			ray.origin.addScaledVector(ray.direction, 0.1),
+			ray.direction
+		)
+		var collisionResult = ray.intersectBox(box, new THREE.Vector3());
+		if (collisionResult == null) {
+			// throw new Error("An orange arrow is somehow outside the game board!!!")
+			this.direction = this.direction.multiplyScalar(-1)
+			return this.getTargetPos()
+		}
+		return collisionResult;
+	}
+	getMaxTime() {
+		return Math.round(this.posOriginal.distanceTo(this.posTarget) * 20)
+	}
+	tick() {
+		// Find new pos
+		this.time += 1;
+		var animPos = ease(this.time / this.maxTime);
+		this.pos.x = mapN(animPos, 0, 1, this.posOriginal.x, this.posTarget.x)
+		this.pos.y = mapN(animPos, 0, 1, this.posOriginal.z, this.posTarget.z)
+		// switch directions
+		if (this.time >= this.maxTime) {
+			this.time = 0;
+			this.direction = this.direction.multiplyScalar(-1)
+			this.posOriginal = new THREE.Vector3(this.pos.x, 0, this.pos.y)
+			this.posTarget = this.getTargetPos()
+			this.maxTime = this.getMaxTime()
+		}
+		if (Number.isNaN(this.pos.x)) debugger;
+		// update mesh
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+		this.axisRotation += 0.05
+		this.updateRotation()
+	}
+	updateRotation() {
+		// Rotate around Y axis (so it points in the right direction)
+		var rotationYAxis = -Math.atan2(this.posTarget.z - this.posOriginal.z, this.posTarget.x - this.posOriginal.x);
+		this.mesh.setRotationFromAxisAngle(new THREE.Vector3(0, 1, 0), rotationYAxis);
+		// Rotate around pointing axis (so it is spinning)
+		// (The reason we rotate around 1,0,0 is because the X axis was rotated in the previous step)
+		this.mesh.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.axisRotation))
+	}
+}
 class PurpleBox extends Enemy {
 	/**
 	 * @param {number} x
@@ -1054,86 +1158,6 @@ class PurpleBoxRemnant extends Enemy {
 // 	scene.add( lines );
 // 	lines.position.set(7, 0, 3);
 // 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
-// // Orange arrow:
-// (() => {
-// 	var planePoints = [
-// 		// arrow
-// 		{ from: { x: 0, y: 0, z:  0 }, to: { x: 8, y: 0, z:  5 } }, // 0, 0 => 8, 5
-// 		{ from: { x: 8, y: 0, z:  5 }, to: { x: 0, y: 0, z: 10 } }, // 0, 10
-// 		{ from: { x: 0, y: 0, z: 10 }, to: { x: 0, y: 0, z:  0 } }, // 0, 0
-// 		// box
-// 		{ from: { x: -1, y: 0, z: 4 }, to: { x:  1, y: 0, z: 4 } }, // -1, 4 => 1, 4
-// 		{ from: { x:  1, y: 0, z: 4 }, to: { x:  1, y: 0, z: 6 } }, // 1, 6
-// 		{ from: { x:  1, y: 0, z: 6 }, to: { x: -1, y: 0, z: 6 } }, // -1, 6
-// 		{ from: { x: -1, y: 0, z: 6 }, to: { x: -1, y: 0, z: 4 } } // -1, 4
-// 	]
-// 	const geometry = makeBufferGeometryFromLines([
-// 		...planePoints,
-// 		...planePoints.map((v) => ({
-// 			from: { x: v.from.x, y: v.from.z - 5, z: 5 },
-// 			to:   { x: v.to.x,   y: v.to.z   - 5, z: 5 }
-// 		})),
-// 		{
-// 			from: { x: 0, y: 0, z: 5 },
-// 			to:   { x: 8, y: 0, z: 5 }
-// 		}
-// 	]);
-// 	const material = new THREE.LineBasicMaterial( { color: 0xFF8800, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(-3, 0, 3);
-// 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
-// // Purple boxes:
-// function generatePurpleBoxPoints() {
-// 	const S = 2; // half the size of the box (dist. from the center to the edge)
-// 	const H = 3; // the full height of the box (dist. from the bottom to the top)
-// 	const M = 0.45; // the height of the smaller square (dist. from the bottom)
-// 	var outsidePoints = [
-// 		// outside square
-// 		{ from: { x: -S, y: 0, z: -S }, to: { x: -S, y: 0, z:  S } },
-// 		{ from: { x: -S, y: 0, z:  S }, to: { x:  S, y: 0, z:  S } },
-// 		{ from: { x:  S, y: 0, z:  S }, to: { x:  S, y: 0, z: -S } },
-// 		{ from: { x:  S, y: 0, z: -S }, to: { x: -S, y: 0, z: -S } }
-// 	]
-// 	var points = [
-// 		// outside square
-// 		...outsidePoints.map((v) => ({
-// 			from: { x: v.from.x + S, y: 0, z: v.from.z + S },
-// 			to:   { x: v.to.x   + S, y: 0, z: v.to.z   + S }
-// 		})),
-// 		// inside square
-// 		...outsidePoints.map((v) => ({
-// 			from: { x: v.from.x * (1-M), y: H*M, z: v.from.z * (1-M) },
-// 			to:   { x: v.to.x   * (1-M), y: H*M, z: v.to.z   * (1-M) }
-// 		})).map((v) => ({
-// 			from: { x: v.from.x + S, y: v.from.y, z: v.from.z + S },
-// 			to:   { x: v.to.x   + S, y: v.to.y,   z: v.to.z   + S }
-// 		})),
-// 		// diagonal lines
-// 		...outsidePoints.map((v) => ({
-// 			from: { x: v.from.x + S, y: 0, z: v.from.z + S },
-// 			to:   { x:            S, y: H, z:            S }
-// 		}))
-// 	]
-// 	return points
-// }
-// (() => {
-// 	const geometry = makeBufferGeometryFromLines(generatePurpleBoxPoints());
-// 	const material = new THREE.LineBasicMaterial( { color: 0x7700FF, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(-1, 0, 1.5);
-// 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
-// (() => {
-// 	const geometry = makeBufferGeometryFromLines(generatePurpleBoxPoints());
-// 	const material = new THREE.LineBasicMaterial( { color: 0x7700FF, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(0.5, 0, 2.5);
-// 	lines.scale.set(0.1, 0.1, 0.1);
 // })();
 // // Proton
 // function generateProtonPoints() {

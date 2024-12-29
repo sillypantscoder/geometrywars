@@ -4158,6 +4158,10 @@ const THREE = (() => {
 
 		}
 
+		/**
+		 * @param {Vector3} v The vector to add.
+		 * @param {number} s The scalar to multiply with `v`.
+		 */
 		addScaledVector( v, s ) {
 
 			this.x += v.x * s;
@@ -5554,6 +5558,10 @@ const THREE = (() => {
 
 		}
 
+		/**
+		 * @param {number} t
+		 * @param {Vector3} target
+		 */
 		at( t, target ) {
 
 			return target.copy( this.origin ).addScaledVector( this.direction, t );
@@ -5838,6 +5846,11 @@ const THREE = (() => {
 
 		}
 
+		/**
+		 * @param {Box3} box
+		 * @param {Vector3} target
+		 * @returns {Vector3 | null}
+		 */
 		intersectBox( box, target ) {
 
 			let tmin, tmax, tymin, tymax, tzmin, tzmax;
