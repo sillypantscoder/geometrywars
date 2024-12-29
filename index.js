@@ -26,6 +26,14 @@ function getArrowKeyVector() {
 
 const BOARD_SIZE = 30;
 
+var points = 0;
+var multiplier = 1;
+var pointsDisplay = (() => {
+	var e = document.querySelector("#display")
+	if (e == null) throw new Error("display element is missing")
+	return e
+})();
+
 /**
  * @template {any} T
  * @param {T[]} items
@@ -139,7 +147,10 @@ class LineObject {
 		objects.splice(objects.indexOf(this), 1)
 		scene.remove(this.mesh);
 	}
-	destroy() {
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
 		this.remove()
 		for (var i = 0; i < this.lines.length; i++) {
 			var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
@@ -255,7 +266,7 @@ class Player extends LineObject {
 			var newDirection = (Math.PI * -0.5) - Math.atan2(newDirectionVector.y, newDirectionVector.x)
 			this.direction = newDirection
 		}
-		newDirectionVector.multiplyScalar(0.04)
+		newDirectionVector.multiplyScalar(0.06)
 		this.pos.x += newDirectionVector.x
 		this.pos.y += newDirectionVector.y
 		// borders
@@ -302,7 +313,7 @@ class Player extends LineObject {
 		for (var i = 0; i < objects.length; i++) {
 			if (objects[i] instanceof Grid) continue;
 			if (objects[i] instanceof DeathParticle) continue;
-			objects[i].destroy();
+			objects[i].destroy(false);
 			i -= 1;
 		}
 	}
@@ -343,16 +354,16 @@ class Bullet extends LineObject {
 				var d = dist(this.pos, e.pos)
 				if (d < 0.75) {
 					this.remove()
-					e.destroy()
+					e.destroy(true)
 					return;
 				}
 			}
 		}
 		// check for hit walls
-		if (this.pos.x < 0) this.destroy()
-		if (this.pos.y < 0) this.destroy()
-		if (this.pos.x > BOARD_SIZE) this.destroy()
-		if (this.pos.y > BOARD_SIZE) this.destroy()
+		if (this.pos.x < 0) this.destroy(false)
+		if (this.pos.y < 0) this.destroy(false)
+		if (this.pos.x > BOARD_SIZE) this.destroy(false)
+		if (this.pos.y > BOARD_SIZE) this.destroy(false)
 	}
 }
 class EnemySpawner extends LineObject {
@@ -370,7 +381,10 @@ class EnemySpawner extends LineObject {
 			/** @type {(x: number, y: number) => Enemy} */
 			var selectedCreator = choice([
 				(x, y) => new BlueDiamond(x, y),
+				(x, y) => new BlueDiamond(x, y),
 				(x, y) => new PinkSquares(x, y),
+				(x, y) => new PinkSquares(x, y),
+				(x, y) => new Pinwheel(x, y),
 				(x, y) => new Pinwheel(x, y),
 				(x, y) => new PurpleBox(x, y)
 			])
@@ -434,6 +448,91 @@ class SpawnWarning extends LineObject {
 		}
 	}
 }
+class Rice extends LineObject {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.vx = Math.random() - 0.5
+		this.vy = Math.random() - 0.5
+		this.vr = Math.random() - 0.5
+		this.time = 0
+	}
+	getGeometry() {
+		const R = 0.5;
+		return [
+			{ from: { x:    0, y: 0, z: -R }, to: { x: .5*R, y: 0, z:  0 } }, // (top right)
+			{ from: { x: .5*R, y: 0, z:  0 }, to: { x:    0, y: 0, z:  R } }, // (bottom right)
+			{ from: { x:    0, y: 0, z:  R }, to: { x:-.5*R, y: 0, z:  0 } }, // (bottom left)
+			{ from: { x:-.5*R, y: 0, z:  0 }, to: { x:    0, y: 0, z: -R } }  // (top left)
+		]
+	}
+	getColor() {
+		return 0x00FF33;
+	}
+	tick() {
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (! (e instanceof Player)) continue;
+			var d = dist(this.pos, e.pos)
+			if (d < 1.5) {
+				// Pickup
+				this.remove()
+				multiplier += 1;
+				(new RiceCollection(this.pos.x, this.pos.y, this.mesh.rotation.y, e)).spawn();
+			}
+		}
+		// move
+		this.pos.x += this.vx * 0.01;
+		this.pos.y += this.vy * 0.01;
+		// time
+		this.time += 1
+		if (this.time >= 200) {
+			this.mesh.visible = this.time % 2 == 0
+		}
+		if (this.time >= 300) {
+			this.destroy(false)
+		}
+		// update mesh
+		this.mesh.position.x = this.pos.x;
+		this.mesh.position.z = this.pos.y;
+		this.mesh.rotation.y += this.vr * 0.01;
+	}
+}
+class RiceCollection extends Rice {
+	maxTime = 10
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {number} r
+	 * @param {Player} target
+	 */
+	constructor(x, y, r, target) {
+		super(x, y)
+		this.mesh.rotation.y = r
+		this.target = target
+	}
+	tick() {
+		// time
+		this.time += 1
+		if (this.time >= this.maxTime) {
+			this.remove()
+		}
+		// find pos
+		var targetX = this.target.pos.x;
+		var targetY = this.target.pos.y;
+		var progress = this.time / this.maxTime
+		progress = progress * progress;
+		var frameX = this.pos.x + ((targetX - this.pos.x) * progress)
+		var frameY = this.pos.y + ((targetY - this.pos.y) * progress)
+		// update mesh
+		this.mesh.position.x = frameX;
+		this.mesh.position.z = frameY;
+		this.mesh.rotation.y += this.vr * 0.01;
+	}
+}
 class Enemy extends LineObject {
 	tick() {
 		// check for collisions
@@ -442,11 +541,21 @@ class Enemy extends LineObject {
 			if (e instanceof Player) {
 				var d = dist(this.pos, e.pos)
 				if (d < 0.75) {
-					this.destroy()
+					this.destroy(false)
 					e.destroy()
 					i -= 1;
 				}
 			}
+		}
+	}
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
+		super.destroy(hasScore)
+		if (hasScore) {
+			points += multiplier;
+			(new Rice(this.pos.x, this.pos.y)).spawn()
 		}
 	}
 }
@@ -483,7 +592,7 @@ class BlueDiamond extends Enemy {
 		]
 	}
 	getColor() {
-		return 0x6699CC;
+		return 0x5577CC;
 	}
 	tick() {
 		if ((this.switchTime -= 1) <= 0) {
@@ -790,16 +899,21 @@ class PurpleBox extends Enemy {
 		this.mesh.position.z = this.pos.y
 		super.tick()
 	}
-	destroy() {
-		super.destroy()
-		for (var i = 0; i < 3; i++) {
-			var p = new PurpleBoxRemnant(this.pos.x + (Math.random() - 0.5), this.pos.y + (Math.random() - 0.5))
-			p.spawn();
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
+		super.destroy(hasScore)
+		if (hasScore) {
+			for (var i = 0; i < 3; i++) {
+				var p = new PurpleBoxRemnant(this.pos.x + (Math.random() - 0.5), this.pos.y + (Math.random() - 0.5))
+				p.spawn();
+			}
 		}
 	}
 }
 class PurpleBoxRemnant extends Enemy {
-	radius = 1.5
+	radius = 2
 	/**
 	 * @param {number} x
 	 * @param {number} y
@@ -831,8 +945,11 @@ class PurpleBoxRemnant extends Enemy {
 		this.mesh.position.z = this.pos.y
 		super.tick()
 	}
-	destroy() {
-		if (this.invunTime <= 0) super.destroy()
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
+		if (this.invunTime <= 0) super.destroy(hasScore)
 		else this.invunTime -= 1
 	}
 }
@@ -1079,6 +1196,8 @@ function animate() {
 	blurcanvas.fillStyle = "black"
 	blurcanvas.fillRect(0, 0, window.innerWidth, window.innerHeight)
 	blurcanvas.drawImage(renderer.domElement, 0, 0)
+	// score
+	pointsDisplay.innerHTML = `Points: ${points}<br><small>x${multiplier}</small>`
 	// Animation loop
 	requestAnimationFrame(animate)
 }

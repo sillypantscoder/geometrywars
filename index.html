@@ -6,6 +6,14 @@ body {
 	margin: 0;
 	background: black;
 }
+#display {
+	position: absolute;
+	top: 1.5em;
+	left: 1.5em;
+	font-size: 2em;
+	font-family: monospace;
+	color: lime;
+}
 #blurcanvas {
 	position: absolute;
 	filter: blur(15px) brightness(6);
@@ -15,6 +23,7 @@ body {
 		</style>
 	</head>
 	<body>
+		<div id="display">Points</div>
 		<canvas id="blurcanvas"></canvas>
 		<script src="three.js"></script>
 		<script src="OrbitControls.js"></script>
