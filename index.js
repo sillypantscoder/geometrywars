@@ -10,6 +10,18 @@ const Dir = {
 	'RIGHT': { x:  1, y: 0, sign: true,  vector: new THREE.Vector2( 1, 0) }
 }
 
+var frameRate = 60;
+(async function detectFrameRate() {
+	const trials = 200;
+	var startTime = new Date();
+	for (var i = 0; i < trials; i++) {
+		await new Promise((resolve) => requestAnimationFrame(resolve))
+		var endTime = new Date();
+		var diff = endTime.getTime() - startTime.getTime();
+		frameRate = Math.round(trials / (diff / 1000));
+	}
+})();
+
 const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
 const dist = (/** @type {{ x: number; y: number; }} */ a, /** @type {{ x: number; y: number; }} */ b) => Math.sqrt(((a.x-b.x)*(a.x-b.x))+((a.y-b.y)*(a.y-b.y)))
 const mapN = (/** @type {number} */ x, /** @type {number} */ min1, /** @type {number} */ max1, /** @type {number} */ min2, /** @type {number} */ max2) => ((x - min1) * (max2 - min2)) / (max1 - min1) + min2;
@@ -33,6 +45,11 @@ var pointsDisplay = (() => {
 	var e = document.querySelector("#display")
 	if (e == null) throw new Error("display element is missing")
 	return e
+})();
+var highScore = (() => {
+	var data = localStorage.getItem("HighScore")
+	if (data == null) return 0
+	return parseInt(data)
 })();
 
 /**
@@ -317,6 +334,9 @@ class Player extends LineObject {
 			objects[i].destroy(false);
 			i -= 1;
 		}
+		// save score
+		var previousScore = parseInt(localStorage.getItem("HighScore") ?? "0")
+		localStorage.setItem("HighScore", String(Math.max(previousScore, points)))
 	}
 }
 class Bullet extends LineObject {
@@ -402,7 +422,7 @@ class EnemySpawner extends LineObject {
 class Spawning extends LineObject {
 	static spawnTime = 30;
 	/**
-	 * @param {Enemy} enemy
+	 * @param {LineObject} enemy
 	 */
 	constructor(enemy) {
 		super(enemy.pos.x, enemy.pos.y)
@@ -414,6 +434,11 @@ class Spawning extends LineObject {
 		this.mesh.rotation.y = enemy.mesh.rotation.y
 		// time
 		this.time = 0
+		// camera for player
+		if (enemy instanceof Player) {
+			camera.position.x = this.pos.x
+			camera.position.z = this.pos.y
+		}
 	}
 	getGeometry() { return []; }
 	getColor() { return 0; }
@@ -429,7 +454,7 @@ class Spawning extends LineObject {
 }
 class SpawnWarning extends LineObject {
 	/**
-	 * @param {Enemy} enemy
+	 * @param {LineObject} enemy
 	 */
 	constructor(enemy) {
 		super(enemy.pos.x, enemy.pos.y)
@@ -554,11 +579,18 @@ class Enemy extends LineObject {
 	 * @param {boolean} hasScore
 	 */
 	destroy(hasScore) {
-		super.destroy(hasScore)
+		super.destroy(hasScore);
 		if (hasScore) {
 			points += multiplier;
-			(new Rice(this.pos.x, this.pos.y)).spawn()
+			var rice = this.getRiceAmount();
+			for (var i = 0; i < rice; i++) {
+				var r = new Rice(this.pos.x, this.pos.y);
+				r.spawn();
+			}
 		}
+	}
+	getRiceAmount() {
+		return 1 + Math.floor(Math.random() * 3);
 	}
 }
 class BlueDiamond extends Enemy {
@@ -569,7 +601,7 @@ class BlueDiamond extends Enemy {
 	constructor(x, y) {
 		super(x, y)
 		this.switchTime = 0;
-		/** @type {Enemy} */
+		/** @type {BlueDiamond | Player} */
 		this.target = this;
 	}
 	getGeometry() {
@@ -602,11 +634,12 @@ class BlueDiamond extends Enemy {
 			this.target = this;
 			var targetDist = 1000000;
 			for (var i = 0; i < objects.length; i++) {
-				if (objects[i] == this) continue;
-				if (! (objects[i] instanceof Player)) continue;
-				var d = dist(this.pos, objects[i].pos)
+				var obj = objects[i]
+				if (obj == this) continue;
+				if (! (obj instanceof Player)) continue;
+				var d = dist(this.pos, obj.pos)
 				if (d < targetDist) {
-					this.target = objects[i];
+					this.target = obj;
 					targetDist = d;
 				}
 			}
@@ -918,6 +951,9 @@ class OrangeArrow extends Enemy {
 		// (The reason we rotate around 1,0,0 is because the X axis was rotated in the previous step)
 		this.mesh.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.axisRotation))
 	}
+	getRiceAmount() {
+		return super.getRiceAmount() + 1
+	}
 }
 class PurpleBox extends Enemy {
 	/**
@@ -1015,6 +1051,9 @@ class PurpleBox extends Enemy {
 			}
 		}
 	}
+	getRiceAmount() {
+		return 1;
+	}
 }
 class PurpleBoxRemnant extends Enemy {
 	radius = 2
@@ -1055,6 +1094,9 @@ class PurpleBoxRemnant extends Enemy {
 	destroy(hasScore) {
 		if (this.invunTime <= 0) super.destroy(hasScore)
 		else this.invunTime -= 1
+	}
+	getRiceAmount() {
+		return Math.round(Math.random());
 	}
 }
 (new Grid(0, 0)).spawn();
@@ -1210,18 +1252,31 @@ var blurcanvas = (() => {
 	return r
 })();
 
-function animate() {
+function doTick() {
 	// scene
 	for (var e of [...objects]) {
 		e.tick();
 	}
+}
+function updateRender() {
 	// render
 	renderer.render( scene, camera );
 	blurcanvas.fillStyle = "black"
 	blurcanvas.fillRect(0, 0, window.innerWidth, window.innerHeight)
 	blurcanvas.drawImage(renderer.domElement, 0, 0)
 	// score
-	pointsDisplay.innerHTML = `Points: ${points}<br><small>x${multiplier}</small>`
+	pointsDisplay.innerHTML = `Points: ${points}<br><small>x${multiplier}</small><br><small>High score: ${highScore}</small>`
+}
+
+var frameTime = 0
+function animate() {
+	// default frame rate = 120
+	frameTime += 120 / frameRate
+	while (frameTime > 1) {
+		frameTime -= 1
+		doTick()
+	}
+	updateRender()
 	// Animation loop
 	requestAnimationFrame(animate)
 }
