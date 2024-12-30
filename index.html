@@ -6,7 +6,7 @@ body {
 	margin: 0;
 	background: black;
 }
-#display {
+#menu {
 	position: absolute;
 	top: 1.5em;
 	left: 1.5em;
@@ -20,10 +20,26 @@ body {
 	pointer-events: none;
 	z-index: -1;
 }
+button {
+	margin: 0;
+	padding: 0em 0.5em;
+	display: inline-block;
+	background: none;
+	border: none;
+	color: inherit;
+	font-size: 1em;
+	font-family: inherit;
+	cursor: pointer;
+	text-decoration: underline;
+}
 		</style>
 	</head>
 	<body>
-		<div id="display">Points</div>
+		<div id="menu"><div id="display"></div><div>
+			<div style="padding-top: 1em;">Select Mode:</div>
+			<button onclick="event.target.parentNode.remove(); (new RandomEnemySpawner()).spawn();">Evolved</button>
+			<button onclick="event.target.parentNode.remove(); (new WavesEnemySpawner()).spawn();">Waves</button>
+		</div></div>
 		<canvas id="blurcanvas"></canvas>
 		<script src="three.js"></script>
 		<script src="OrbitControls.js"></script>

@@ -23,6 +23,7 @@ var frameRate = 60;
 })();
 
 const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
+const anti_ease = (/** @type {number} */ x) => x < 0.5 ? (0.5*x) : (1-(0.5*(1-x)));
 const dist = (/** @type {{ x: number; y: number; }} */ a, /** @type {{ x: number; y: number; }} */ b) => Math.sqrt(((a.x-b.x)*(a.x-b.x))+((a.y-b.y)*(a.y-b.y)))
 const mapN = (/** @type {number} */ x, /** @type {number} */ min1, /** @type {number} */ max1, /** @type {number} */ min2, /** @type {number} */ max2) => ((x - min1) * (max2 - min2)) / (max1 - min1) + min2;
 
@@ -58,30 +59,62 @@ var highScore = (() => {
  * @returns {T}
  */
 function choice(items) { return items[Math.floor(Math.random()*items.length)]; }
+/**
+ * @template {any} T
+ * @param {{ item: T, weight: number }[]} items
+ * @returns {T}
+ */
+function choice_weighted(items) {
+	const totalWeight = items.map(i => i.weight).reduce((a, b) => a + b);
+	const target = Math.random() * totalWeight;
+	let sum = 0;
+	for (const item of items) {
+		sum += item.weight;
+		if (sum > target) return item.item;
+	}
+	return items[items.length - 1].item;
+}
 
+/**
+ * @param {number} width
+ * @param {number} height
+ */
+function makeCamera(width, height) {
+	var cam = new THREE.PerspectiveCamera( 75, width / height, 0.1, 1000 );
+	cam.position.x = 0;
+	cam.position.y = (0.00625) * ((width + height));
+	cam.position.z = 0;
+	cam.lookAt(cam.position.x, 0, cam.position.z)
+	return cam;
+}
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
-camera.position.x = 0;
-camera.position.y = 15;
-camera.position.z = 0;
-camera.lookAt(camera.position.x, 0, camera.position.z)
+var camera = makeCamera(window.innerWidth, window.innerHeight);
 
 const renderer = new THREE.WebGLRenderer({ alpha: true });
 renderer.setClearColor( 0x000000, 0 );
 renderer.setSize( window.innerWidth, window.innerHeight );
 document.body.appendChild( renderer.domElement );
 
+/**
+ * @param {any} width
+ * @param {any} height
+ */
+function resize(width, height) {
+	camera = makeCamera(width, height);
+	renderer.setSize(width, height);
+	var blurcanvas_elm = document.getElementById("blurcanvas")
+	if (blurcanvas_elm == null) throw new Error("can't find the blur canvas :(((((")
+	if (! (blurcanvas_elm instanceof HTMLCanvasElement)) throw new Error("blur canvas is not a canvas :(((((")
+	blurcanvas_elm.width = width
+	blurcanvas_elm.height = height
+}
+window.addEventListener("resize", () => {
+	resize(window.innerWidth, window.innerHeight);
+});
+
 // const controls = new OrbitControls( camera, renderer.domElement );
 // controls.target.set(camera.position.x, 0, camera.position.z);
 // controls.update();
-
-// make a cube
-// (() => {
-// 	const geometry = new THREE.BoxGeometry( 1, 1, 1 );
-// 	const material = new THREE.MeshLambertMaterial( { color: 0x00FF00 } );
-// 	const cube = new THREE.Mesh( geometry, material );
-// 	scene.add( cube );
-// })();
 
 // make some lights
 (() => {
@@ -392,30 +425,107 @@ class EnemySpawner extends LineObject {
 		super(0, 0)
 		scene.remove(this.mesh);
 		this.time = 0
-		this.every = 70
 	}
 	getGeometry() { return [] }
 	getColor() { return 0 }
 	tick() {
 		this.time += 1
+	}
+}
+class RandomEnemySpawner extends EnemySpawner {
+	constructor() {
+		super()
+		this.every = 110
+	}
+	tick() {
+		super.tick()
 		if (this.time >= this.every) {
-			/** @type {(x: number, y: number) => Enemy} */
-			var selectedCreator = choice([
-				(x, y) => new BlueDiamond(x, y),
-				(x, y) => new BlueDiamond(x, y),
-				(x, y) => new PinkSquares(x, y),
-				(x, y) => new PinkSquares(x, y),
-				(x, y) => new Pinwheel(x, y),
-				(x, y) => new Pinwheel(x, y),
-				(x, y) => new OrangeArrow(x, y, choice(Object.values(Dir)).vector),
-				(x, y) => new OrangeArrow(x, y, choice(Object.values(Dir)).vector),
-				(x, y) => new PurpleBox(x, y)
-			])
+			/** @type {{ item: (x: number, y: number) => Enemy, weight: number }[]} */
+			var choices = [
+				{ item: (x, y) => new BlueDiamond(x, y), weight: 2 },
+				{ item: (x, y) => new PinkSquares(x, y), weight: 4 },
+				{ item: (x, y) => new Pinwheel(x, y),    weight: 4 },
+				{ item: (x, y) => new OrangeArrow(x, y,
+					choice(Object.values(Dir)).vector),  weight: 2 },
+				{ item: (x, y) => new PurpleBox(x, y),   weight: 0.5 }
+			]
+			var selectedCreator = choice_weighted(choices)
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
 			var spawning = new Spawning(newEnemy)
 			spawning.spawn()
-			this.every *= 0.99
+			// Reset time
+			this.every *= 0.995
 			this.time = 0
+		}
+	}
+}
+class WavesEnemySpawner extends EnemySpawner {
+	constructor() {
+		super()
+		this.every = 120*4
+		this.time = this.every - 60
+	}
+	tick() {
+		super.tick()
+		if (this.time >= this.every) {
+			// Spawn random wave
+			var side = choice(Object.values(Dir))
+			var halves = choice([
+				{ low: true, high: true },
+				{ low: true, high: false },
+				{ low: false, high: true }
+			])
+			var density = 2/3
+			for (var n = 0; n < BOARD_SIZE * density; n++) {
+				// Check half is correct
+				var half = n/density < BOARD_SIZE * 0.5
+				if (half) {
+					if (!halves.low) continue
+				} else {
+					if (!halves.high) continue
+				}
+				// Find location and spawn
+				var x = side.x == 0 ? n/density : 0
+				var y = side.y == 0 ? n/density : 0
+				var e = new OrangeArrow(x, y, side.vector)
+				e.spawn()
+			}
+			// Reset time
+			this.time = 0
+			this.every *= 0.95
+			if (this.every < 80) {
+				this.every = 80
+			}
+			if (this.every <= 240) {
+				// Bonus pink square (near one of the corners)
+				var x = anti_ease(Math.random()) * BOARD_SIZE
+				var y = anti_ease(Math.random()) * BOARD_SIZE
+				var e2 = new PinkSquares(x, y)
+				e2.spawn()
+			}
+			if (this.every <= 200) {
+				// Bonus blue diamond (in one of the corners)
+				var x = Math.round(Math.random()) * BOARD_SIZE
+				var y = Math.round(Math.random()) * BOARD_SIZE
+				var e3 = new BlueDiamond(x, y)
+				e3.spawn()
+			}
+			if (this.every < 140) {
+				// More bonus pink squares
+				for (var i = 0; i < 4; i++) {
+					var x = Math.random() * BOARD_SIZE
+					var y = Math.random() * BOARD_SIZE
+					var e4 = new PinkSquares(x, y)
+					e4.spawn()
+				}
+				// More bonus blue diamonds
+				for (var i = 0; i < 4; i++) {
+					var x = Math.round(Math.random()) * BOARD_SIZE
+					var y = Math.round(Math.random()) * BOARD_SIZE
+					var e5 = new BlueDiamond(x, y)
+					e5.spawn()
+				}
+			}
 		}
 	}
 }
@@ -517,6 +627,11 @@ class Rice extends LineObject {
 		// move
 		this.pos.x += this.vx * 0.01;
 		this.pos.y += this.vy * 0.01;
+		// limits
+		if (this.pos.x < 0) this.pos.x = 0;
+		if (this.pos.x > BOARD_SIZE) this.pos.x = BOARD_SIZE;
+		if (this.pos.y < 0) this.pos.y = 0;
+		if (this.pos.y > BOARD_SIZE) this.pos.y = BOARD_SIZE;
 		// time
 		this.time += 1
 		if (this.time >= 450) {
@@ -563,17 +678,17 @@ class RiceCollection extends Rice {
 class Enemy extends LineObject {
 	tick() {
 		// check for collisions
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
-			if (e instanceof Player) {
-				var d = dist(this.pos, e.pos)
-				if (d < 0.75) {
-					this.destroy(false)
-					e.destroy()
-					i -= 1;
-				}
-			}
-		}
+		// for (var i = 0; i < objects.length; i++) {
+		// 	var e = objects[i]
+		// 	if (e instanceof Player) {
+		// 		var d = dist(this.pos, e.pos)
+		// 		if (d < 0.75) {
+		// 			this.destroy(false)
+		// 			e.destroy()
+		// 			i -= 1;
+		// 		}
+		// 	}
+		// }
 	}
 	/**
 	 * @param {boolean} hasScore
@@ -920,7 +1035,7 @@ class OrangeArrow extends Enemy {
 		return collisionResult;
 	}
 	getMaxTime() {
-		return Math.round(this.posOriginal.distanceTo(this.posTarget) * 20)
+		return Math.round(this.posOriginal.distanceTo(this.posTarget) * 15)
 	}
 	tick() {
 		// Find new pos
@@ -942,6 +1057,7 @@ class OrangeArrow extends Enemy {
 		this.mesh.position.z = this.pos.y
 		this.axisRotation += 0.05
 		this.updateRotation()
+		super.tick()
 	}
 	updateRotation() {
 		// Rotate around Y axis (so it points in the right direction)
@@ -1100,7 +1216,6 @@ class PurpleBoxRemnant extends Enemy {
 	}
 }
 (new Grid(0, 0)).spawn();
-(new EnemySpawner()).spawn();
 (new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
 
 // /*
