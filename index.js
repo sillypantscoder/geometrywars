@@ -678,17 +678,17 @@ class RiceCollection extends Rice {
 class Enemy extends LineObject {
 	tick() {
 		// check for collisions
-		// for (var i = 0; i < objects.length; i++) {
-		// 	var e = objects[i]
-		// 	if (e instanceof Player) {
-		// 		var d = dist(this.pos, e.pos)
-		// 		if (d < 0.75) {
-		// 			this.destroy(false)
-		// 			e.destroy()
-		// 			i -= 1;
-		// 		}
-		// 	}
-		// }
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (e instanceof Player) {
+				var d = dist(this.pos, e.pos)
+				if (d < 0.75) {
+					this.destroy(false)
+					e.destroy()
+					i -= 1;
+				}
+			}
+		}
 	}
 	/**
 	 * @param {boolean} hasScore
