@@ -35,11 +35,7 @@ button {
 		</style>
 	</head>
 	<body>
-		<div id="menu"><div id="display"></div><div>
-			<div style="padding-top: 1em;">Select Mode:</div>
-			<button onclick="event.target.parentNode.remove(); (new RandomEnemySpawner()).spawn();">Evolved</button>
-			<button onclick="event.target.parentNode.remove(); (new WavesEnemySpawner()).spawn();">Waves</button>
-		</div></div>
+		<div id="menu"></div>
 		<canvas id="blurcanvas"></canvas>
 		<script src="three.js"></script>
 		<script src="OrbitControls.js"></script>

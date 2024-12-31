@@ -43,14 +43,9 @@ const BOARD_SIZE = 30;
 var points = 0;
 var multiplier = 1;
 var pointsDisplay = (() => {
-	var e = document.querySelector("#display")
-	if (e == null) throw new Error("display element is missing")
+	var e = document.querySelector("#menu")
+	if (e == null) throw new Error("menu element is missing")
 	return e
-})();
-var highScore = (() => {
-	var data = localStorage.getItem("HighScore")
-	if (data == null) return 0
-	return parseInt(data)
 })();
 
 /**
@@ -368,8 +363,8 @@ class Player extends LineObject {
 			i -= 1;
 		}
 		// save score
-		var previousScore = parseInt(localStorage.getItem("HighScore") ?? "0")
-		localStorage.setItem("HighScore", String(Math.max(previousScore, points)))
+		var previousScore = parseInt(localStorage.getItem("HighScore" + selectedGameMode) ?? "0")
+		localStorage.setItem("HighScore" + selectedGameMode, String(Math.max(previousScore, points)))
 	}
 }
 class Bullet extends LineObject {
@@ -1218,13 +1213,27 @@ class PurpleBoxRemnant extends Enemy {
 (new Grid(0, 0)).spawn();
 (new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
 
-// /*
-// SVG paths for the different enemies:
-// Blue diamond - M 0 0 L 6 0 L 10 6 L 4 6 Z M 0.4 0.6 L 6.4 0.6 M 3.6 5.4 L 9.6 5.4 M 1.2 0.6 L 4.4 5.4 M 5.6 0.6 L 8.8 5.4
-// Pinwheel - M 5 4 L 5.7 4.3 L 6 5 L 5.7 5.7 L 5 6 L 4.3 5.7 L 4 5 L 4.3 4.3 L 5 4 L 5 0 L 1 0 L 5 4 M 4 5 L 0 5 L 0 9 L 4 5 M 5 6 L 5 10 L 9 10 L 5 6 M 6 5 L 10 5 L 10 1 L 6 5
-// Pink squares - M 0 0 L 0 5 L 5 5 L 5 0 Z M 3 3 L 3 8 L 8 8 L 8 3 Z (copy for front and back, connecting at every point)
-// Green square - M 1 1 L 9 1 L 9 9 L 1 9 L 1 1 M 5 1 L 9 5 L 5 9 L 1 5 L 5 1 (copy for front and back, connecting at first 4 points)
-// Orange arrow - M 0 0 L 8 5 L 0 10 L 0 0 M -1 4 L 1 4 L 1 6 L -1 6 L -1 4 (copy and rotate, plus line across center from 0,5 to 8,5)
+/** @type {Object<string, { highScore: number, spawner: () => EnemySpawner }>} */
+var game_modes = {
+	"Evolved": { highScore: 0, spawner: () => new RandomEnemySpawner() },
+	"Waves": { highScore: 0, spawner: () => new WavesEnemySpawner() }
+};
+/** @type {string | null} */
+var selectedGameMode = null;
+(() => {
+	var modes = Object.keys(game_modes)
+	for (var i = 0; i < modes.length; i++) {
+		var mode = modes[i]
+		var data = game_modes[mode]
+		// Get high score
+		var highScore = (() => {
+			var data = localStorage.getItem("HighScore" + mode)
+			if (data == null) return 0
+			return parseInt(data)
+		})();
+		data.highScore = highScore
+	}
+})();
 
 // // Green Square:
 // (() => {
@@ -1380,7 +1389,13 @@ function updateRender() {
 	blurcanvas.fillRect(0, 0, window.innerWidth, window.innerHeight)
 	blurcanvas.drawImage(renderer.domElement, 0, 0)
 	// score
-	pointsDisplay.innerHTML = `Points: ${points}<br><small>x${multiplier}</small><br><small>High score: ${highScore}</small>`
+	if (selectedGameMode == null) {
+		pointsDisplay.innerHTML = `<div style="padding-top: 1em;">Select Game Mode:</div>` + Object.keys(game_modes).map((v) =>
+			`<button onmousedown="selectedGameMode = '${v}'; game_modes[selectedGameMode].spawner().spawn()">${v}</button> (high score: ${game_modes[v].highScore})`).join("<br>");
+	} else {
+		var highScore = game_modes[selectedGameMode].highScore
+		pointsDisplay.innerHTML = `Points: ${points}<br><small>x${multiplier}</small><br><small>High score: ${highScore}</small>`
+	}
 }
 
 var frameTime = 0
