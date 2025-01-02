@@ -344,11 +344,11 @@ class Player extends LineObject {
 	}
 	destroy() {
 		this.remove()
-		for (var n = 0; n < 20; n++) {
+		for (var n = 0; n < 15; n++) {
 			for (var i = 0; i < this.lines.length; i++) {
 				var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
 				p.spawn()
-				p.v.multiplyScalar(2)
+				p.v.multiplyScalar(2.5)
 				p.av *= 0.25;
 			}
 		}
@@ -359,6 +359,7 @@ class Player extends LineObject {
 		for (var i = 0; i < objects.length; i++) {
 			if (objects[i] instanceof Grid) continue;
 			if (objects[i] instanceof DeathParticle) continue;
+			if (objects[i] instanceof DeathIndicator) continue;
 			objects[i].destroy(false);
 			i -= 1;
 		}
@@ -525,6 +526,36 @@ class WavesEnemySpawner extends EnemySpawner {
 		}
 	}
 }
+class ChallengeEnemySpawner extends EnemySpawner {
+	constructor() {
+		super()
+		this.every = 60
+	}
+	tick() {
+		super.tick()
+		if (this.time >= this.every) {
+			/** @type {{ item: (x: number, y: number) => Enemy, chance: number }[]} */
+			var choices = [
+				{ item: (x, y) => new BlueDiamond(x, y), chance: 0.1 },
+				{ item: (x, y) => new PinkSquares(x, y), chance: 0.1 },
+				{ item: (x, y) => new Pinwheel(x, y),    chance: 0.1 },
+				{ item: (x, y) => new OrangeArrow(x, y,
+					choice(Object.values(Dir)).vector),  chance: 0.5 },
+				{ item: (x, y) => new PurpleBox(x, y),   chance: 0.25 },
+				{ item: (x, y) => new GreenSquare(x, y), chance: 0.125 }
+			]
+			for (var i = 0; i < choices.length; i++) {
+				if (Math.random() > choices[i].chance) continue
+				var newEnemy = choices[i].item(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE);
+				var spawning = new Spawning(newEnemy)
+				spawning.spawn()
+			}
+			// Reset time
+			this.every *= 0.995
+			this.time = 0
+		}
+	}
+}
 class Spawning extends LineObject {
 	static spawnTime = 30;
 	/**
@@ -537,7 +568,11 @@ class Spawning extends LineObject {
 		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.set(this.pos.x, 0, this.pos.y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
-		this.mesh.rotation.y = enemy.mesh.rotation.y
+		this.mesh.rotation.set(
+			enemy.mesh.rotation.x,
+			enemy.mesh.rotation.y,
+			enemy.mesh.rotation.z
+		)
 		// time
 		this.time = 0
 		// camera for player
@@ -569,7 +604,11 @@ class SpawnWarning extends LineObject {
 		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.set(this.pos.x, 0, this.pos.y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
-		this.mesh.rotation.y = enemy.mesh.rotation.y
+		this.mesh.rotation.set(
+			enemy.mesh.rotation.x,
+			enemy.mesh.rotation.y,
+			enemy.mesh.rotation.z
+		)
 		// time
 		this.time = 0
 	}
@@ -580,6 +619,44 @@ class SpawnWarning extends LineObject {
 		var scale = 0.3 + ((0.3 / Spawning.spawnTime) * this.time)
 		this.mesh.scale.set(scale, scale, scale);
 		if (this.time >= Spawning.spawnTime) {
+			this.remove()
+		}
+	}
+}
+class DeathIndicator extends LineObject {
+	/**
+	 * @param {LineObject} enemy
+	 */
+	constructor(enemy) {
+		super(enemy.pos.x, enemy.pos.y)
+		this.enemy = enemy
+		// update mesh
+		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
+		this.mesh.position.set(this.pos.x, 0, this.pos.y);
+		this.mesh.scale.set(
+			enemy.mesh.scale.x,
+			enemy.mesh.scale.y,
+			enemy.mesh.scale.z
+		);
+		this.mesh.rotation.set(
+			enemy.mesh.rotation.x,
+			enemy.mesh.rotation.y,
+			enemy.mesh.rotation.z
+		)
+		// time
+		this.time = 0
+	}
+	getGeometry() { return []; }
+	getColor() { return 0; }
+	tick() {
+		this.time += 1;
+		if (this.time % 50 == 0) {
+			this.mesh.visible = false;
+		}
+		if (this.time % 50 == 25) {
+			this.mesh.visible = true;
+		}
+		if (this.time >= 50 * 6) {
 			this.remove()
 		}
 	}
@@ -679,8 +756,13 @@ class Enemy extends LineObject {
 			if (e instanceof Player) {
 				var d = dist(this.pos, e.pos)
 				if (d < 0.75) {
+					// destroy both
 					this.destroy(false)
 					e.destroy()
+					// indicator
+					var p = new DeathIndicator(this)
+					p.spawn()
+					// continue
 					i -= 1;
 				}
 			}
@@ -1324,7 +1406,8 @@ class PurpleBoxRemnant extends Enemy {
 /** @type {Object<string, { highScore: number, spawner: () => EnemySpawner }>} */
 var game_modes = {
 	"Evolved": { highScore: 0, spawner: () => new RandomEnemySpawner() },
-	"Waves": { highScore: 0, spawner: () => new WavesEnemySpawner() }
+	"Waves": { highScore: 0, spawner: () => new WavesEnemySpawner() },
+	"Challenge": { highScore: 0, spawner: () => new ChallengeEnemySpawner() }
 };
 /** @type {string | null} */
 var selectedGameMode = null;
