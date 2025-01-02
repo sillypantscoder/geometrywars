@@ -290,6 +290,7 @@ class Player extends LineObject {
 		super(x, y)
 		this.direction = 0
 		this.shootTime = 0
+		this.canShoot = true
 	}
 	getGeometry() {
 		return [
@@ -332,6 +333,7 @@ class Player extends LineObject {
 	 * @param {number} targetY
 	 */
 	shoot(targetX, targetY) {
+		if (!this.canShoot) return
 		if (this.shootTime > 0) return
 		this.shootTime = 20;
 		var diffX = targetX - (window.innerWidth  / 2)
@@ -400,6 +402,8 @@ class Bullet extends LineObject {
 		var es = [...objects]
 		for (var i = 0; i < es.length; i++) {
 			var e = es[i]
+			if (e instanceof Barbell) continue
+			if (e instanceof BarbellEnd) continue
 			if (e instanceof Enemy) {
 				var d = dist(this.pos, e.pos)
 				if (d < 0.75) {
@@ -444,7 +448,8 @@ class RandomEnemySpawner extends EnemySpawner {
 				{ item: (x, y) => new OrangeArrow(x, y,
 					choice(Object.values(Dir)).vector),  weight: 2 },
 				{ item: (x, y) => new PurpleBox(x, y),   weight: 0.5 },
-				{ item: (x, y) => new GreenSquare(x, y), weight: 1 }
+				{ item: (x, y) => new GreenSquare(x, y), weight: 0.5 },
+				{ item: (x, y) => new Barbell(x, y), weight: 0.5 }
 			]
 			var selectedCreator = choice_weighted(choices)
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
@@ -526,6 +531,48 @@ class WavesEnemySpawner extends EnemySpawner {
 		}
 	}
 }
+class PacifismEnemySpawner extends EnemySpawner {
+	constructor() {
+		super()
+		this.every = 240
+		this.time += this.every
+		this.amt = 3
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (! (e instanceof Player)) continue;
+			e.canShoot = false;
+		}
+	}
+	tick() {
+		super.tick()
+		if (this.time >= this.every) {
+			var x = Math.round(Math.random()) * BOARD_SIZE;
+			var y = Math.round(Math.random()) * BOARD_SIZE;
+			for (var i = 0; i < this.amt; i++) {
+				// move pos
+				x += (Math.random() - 0.5) * 2 * 5;
+				y += (Math.random() - 0.5) * 2 * 5;
+				// clamp pos
+				if (x < 0) x = 0;
+				if (x > BOARD_SIZE) x = BOARD_SIZE;
+				if (y < 0) y = 0;
+				if (y > BOARD_SIZE) y = BOARD_SIZE;
+				// spawn enemy
+				var newEnemy = new BlueDiamond(x, y);
+				var spawning = new Spawning(newEnemy)
+				spawning.spawn()
+			}
+			for (var i = 0; i < 1; i++) {
+				var newEnemy2 = new Barbell(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE);
+				var spawning = new Spawning(newEnemy2)
+				spawning.spawn()
+			}
+			// Reset time
+			this.amt += 1
+			this.time = 0
+		}
+	}
+}
 class ChallengeEnemySpawner extends EnemySpawner {
 	constructor() {
 		super()
@@ -542,7 +589,8 @@ class ChallengeEnemySpawner extends EnemySpawner {
 				{ item: (x, y) => new OrangeArrow(x, y,
 					choice(Object.values(Dir)).vector),  chance: 0.5 },
 				{ item: (x, y) => new PurpleBox(x, y),   chance: 0.25 },
-				{ item: (x, y) => new GreenSquare(x, y), chance: 0.125 }
+				{ item: (x, y) => new GreenSquare(x, y), chance: 0.125 },
+				{ item: (x, y) => new Barbell(x, y), chance: 0.01 }
 			]
 			for (var i = 0; i < choices.length; i++) {
 				if (Math.random() > choices[i].chance) continue
@@ -566,7 +614,7 @@ class Spawning extends LineObject {
 		this.enemy = enemy
 		// update mesh
 		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
-		this.mesh.position.set(this.pos.x, 0, this.pos.y);
+		this.mesh.position.copy(enemy.mesh.position);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 		this.mesh.rotation.set(
 			enemy.mesh.rotation.x,
@@ -588,7 +636,12 @@ class Spawning extends LineObject {
 			this.enemy.spawn();
 			this.remove();
 		} else if (this.time % Spawning.spawnTime == 0) {
-			(new SpawnWarning(this.enemy)).spawn();
+			if (this.enemy instanceof Barbell) {
+				(new SpawnWarning(this.enemy.halfLeft)).spawn();
+				(new SpawnWarning(this.enemy.halfRight)).spawn();
+			} else {
+				(new SpawnWarning(this.enemy)).spawn();
+			}
 		}
 		this.time += 1;
 	}
@@ -602,7 +655,7 @@ class SpawnWarning extends LineObject {
 		this.enemy = enemy
 		// update mesh
 		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
-		this.mesh.position.set(this.pos.x, 0, this.pos.y);
+		this.mesh.position.copy(enemy.mesh.position);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 		this.mesh.rotation.set(
 			enemy.mesh.rotation.x,
@@ -1400,6 +1453,186 @@ class PurpleBoxRemnant extends Enemy {
 		return Math.round(Math.random());
 	}
 }
+class Barbell extends Enemy {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.halfLeft = new BarbellEnd(this)
+		this.halfRight = new BarbellEnd(this)
+		this.tick()
+	}
+	spawn() {
+		super.spawn()
+		// add halves
+		this.halfLeft.spawn()
+		this.halfRight.spawn()
+	}
+	remove() {
+		super.remove()
+		// remove halves
+		this.halfLeft.remove()
+		this.halfRight.remove()
+	}
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
+		super.destroy(hasScore)
+		// destroy halves
+		this.halfLeft.destroy(true)
+		this.halfRight.destroy(true)
+	}
+	getGeometry() {
+		var barbellWidth = 8;
+		return [
+			{
+				from: { x: -barbellWidth, y: 0, z: 0 },
+				to:   { x:  barbellWidth, y: 0, z: 0 }
+			}
+		]
+	}
+	getColor() {
+		return 0xFF8800;
+	}
+	tick() {
+		// update everything
+		var thisLine = this.setAllMeshRotationsAndPositions_AndReturnThisLine();
+		// check for collisions
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (e instanceof Player) {
+				var d = thisLine.distanceToPoint(new THREE.Vector3(e.pos.x, 0, e.pos.y))
+				if (d < 0.1) {
+					// destroy this
+					this.destroy(true)
+					return
+				}
+			}
+		}
+		// set mesh
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+	}
+	setAllMeshRotationsAndPositions_AndReturnThisLine() {
+		// get center pos
+		this.pos.x = (this.halfLeft.pos.x + this.halfRight.pos.x) / 2
+		this.pos.y = (this.halfLeft.pos.y + this.halfRight.pos.y) / 2
+		// set mesh rotation
+		var rot = -Math.atan2(this.halfRight.pos.y - this.halfLeft.pos.y, this.halfRight.pos.x - this.halfLeft.pos.x)
+		this.mesh.rotation.y = rot
+		// set half rotations
+		this.halfLeft.mesh.rotation.y = rot
+		this.halfRight.mesh.rotation.y = rot + Math.PI
+		// set half positions
+		const barbellWidth = 8/3;
+		// 		(get half vectors from center)
+		var leftVector =  new THREE.Vector2(this.halfLeft.pos.x,  this.halfLeft.pos.y ).sub(this.pos)
+		var rightVector = new THREE.Vector2(this.halfRight.pos.x, this.halfRight.pos.y).sub(this.pos)
+		// 		(set length from center)
+		leftVector.setLength(barbellWidth)
+		rightVector.setLength(barbellWidth)
+		// 		(set positions)
+		this.halfLeft.pos.x = this.pos.x + leftVector.x
+		this.halfLeft.pos.y = this.pos.y + leftVector.y
+		this.halfRight.pos.x = this.pos.x + rightVector.x
+		this.halfRight.pos.y = this.pos.y + rightVector.y
+		// update half mesh positions
+		this.halfLeft.updateMeshPos()
+		this.halfRight.updateMeshPos()
+		// return this line
+		return new THREE.Line3(
+			new THREE.Vector3(leftVector.x  + this.pos.x, 0, leftVector.y  + this.pos.y),
+			new THREE.Vector3(rightVector.x + this.pos.x, 0, rightVector.y + this.pos.y)
+		)
+	}
+}
+class BarbellEnd extends Enemy {
+	/**
+	 * @param {Barbell} barbell
+	 */
+	constructor(barbell) {
+		super(barbell.pos.x, barbell.pos.y)
+		this.src = barbell
+		this.v = THREE.Vector2.randomUnitVector_KindaBiasedTowardsDiagonals();
+		this.pos.x += this.v.x * 0.015;
+		this.pos.y += this.v.y * 0.015;
+	}
+	getGeometry() {
+		const DEG2RAD = Math.PI / 180;
+		const makeCircle = (/** @type {number} */ radius, /** @type {number} */ resolution) => {
+			var points = []
+			for (var i = 0; i < resolution; i++) {
+				var rad = DEG2RAD * (i / resolution) * 360;
+				var x = Math.cos(rad) * radius
+				var y = Math.sin(rad) * radius
+				points.push(new THREE.Vector2(x, y))
+			}
+			return points
+		}
+		var lines = []
+		// Small circles
+		for (var size = 0; size < 3; size++) {
+			var points = makeCircle((size * 0.5) + 0.5, 10)
+			for (var i = 0; i < points.length; i++) {
+				var p = points[i]
+				var previous = i == 0 ? points[points.length - 1] : points[i - 1]
+				lines.push({
+					from: { x: size, y: p.y,        z: p.x        },
+					to:   { x: size, y: previous.y, z: previous.x }
+				})
+			}
+		}
+		console.log(lines)
+		return lines
+	}
+	getColor() {
+		return 0x8833FF;
+	}
+	tick() {
+		this.pos.x += this.v.x * 0.015;
+		this.pos.y += this.v.y * 0.015;
+		// bounce
+		if (this.pos.x <= 0) {
+			this.v.x = Math.abs(this.v.x)
+		}
+		if (this.pos.y <= 0) {
+			this.v.y = Math.abs(this.v.y)
+		}
+		if (this.pos.x >= BOARD_SIZE) {
+			this.v.x = -Math.abs(this.v.x)
+		}
+		if (this.pos.y >= BOARD_SIZE) {
+			this.v.y = -Math.abs(this.v.y)
+		}
+		// update mesh pos
+		this.updateMeshPos()
+		super.tick()
+	}
+	updateMeshPos() {
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+	}
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
+		super.destroy(false)
+		// destroy nearby enemies
+		if (hasScore) {
+			for (var i = 0; i < objects.length; i++) {
+				var e = objects[i]
+				var d = dist(this.pos, e.pos)
+				if (e instanceof Enemy && (!(e instanceof BarbellEnd)) && d < 4) {
+					console.log(e, d)
+					e.destroy(false)
+				}
+			}
+		}
+	}
+}
 (new Grid(0, 0)).spawn();
 (new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
 
@@ -1407,7 +1640,8 @@ class PurpleBoxRemnant extends Enemy {
 var game_modes = {
 	"Evolved": { highScore: 0, spawner: () => new RandomEnemySpawner() },
 	"Waves": { highScore: 0, spawner: () => new WavesEnemySpawner() },
-	"Challenge": { highScore: 0, spawner: () => new ChallengeEnemySpawner() }
+	"Challenge": { highScore: 0, spawner: () => new ChallengeEnemySpawner() },
+	"Pacifism": { highScore: 0, spawner: () => new PacifismEnemySpawner() }
 };
 /** @type {string | null} */
 var selectedGameMode = null;

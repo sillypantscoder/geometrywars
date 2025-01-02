@@ -4563,6 +4563,7 @@ const THREE = (() => {
 
 		}
 
+		/** @param {Vector3} v */
 		distanceTo( v ) {
 
 			return Math.sqrt( this.distanceToSquared( v ) );
@@ -35249,12 +35250,26 @@ const THREE = (() => {
 
 		}
 
+		/**
+		 * @param {Vector3} point
+		 * @param {boolean} clampToLine
+		 * @param {Vector3} target
+		 * @returns {Vector3}
+		 */
 		closestPointToPoint( point, clampToLine, target ) {
 
 			const t = this.closestPointToPointParameter( point, clampToLine );
 
 			return this.delta( target ).multiplyScalar( t ).add( this.start );
 
+		}
+
+		/**
+		 * @param {Vector3} point
+		 */
+		distanceToPoint(point) {
+			var closest = this.closestPointToPoint(point, true, new Vector3());
+			return closest.distanceTo(point);
 		}
 
 		applyMatrix4( matrix ) {
