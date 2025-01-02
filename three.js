@@ -7608,6 +7608,7 @@ const THREE = (() => {
 
 		}
 
+		/** @param {Object3D} object */
 		add( object ) {
 
 			if ( arguments.length > 1 ) {

@@ -77,7 +77,7 @@ function choice_weighted(items) {
 function makeCamera(width, height) {
 	var cam = new THREE.PerspectiveCamera( 75, width / height, 0.1, 1000 );
 	cam.position.x = 0;
-	cam.position.y = (0.00625) * ((width + height));
+	cam.position.y = (0.0075) * ((width + height));
 	cam.position.z = 0;
 	cam.lookAt(cam.position.x, 0, cam.position.z)
 	return cam;
@@ -110,18 +110,6 @@ window.addEventListener("resize", () => {
 // const controls = new OrbitControls( camera, renderer.domElement );
 // controls.target.set(camera.position.x, 0, camera.position.z);
 // controls.update();
-
-// make some lights
-(() => {
-	const light = new THREE.AmbientLight( 0xFFFFFF, 0.1 );
-	scene.add( light );
-})();
-(() => {
-	const light = new THREE.DirectionalLight( 0xFFFFFF, 1 );
-	light.position.set(4, 3, 5);
-	light.lookAt(0, 0, 0);
-	scene.add( light );
-})();
 
 /**
  * @param {Line[]} points
@@ -761,12 +749,20 @@ class Rice extends LineObject {
 		// time
 		this.time += 1
 		if (this.time >= 450) {
-			this.destroy(false)
+			this.destroy()
 		}
 		// update mesh
 		this.mesh.position.x = this.pos.x;
 		this.mesh.position.z = this.pos.y;
 		this.mesh.rotation.y += this.vr * 0.01;
+	}
+	destroy() {
+		this.remove()
+		for (var i = 0; i < this.lines.length; i++) {
+			var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
+			p.spawn()
+			p.av *= 4;
+		}
 	}
 }
 class RiceCollection extends Rice {
@@ -1482,8 +1478,23 @@ class Barbell extends Enemy {
 	destroy(hasScore) {
 		super.destroy(hasScore)
 		// destroy halves
-		this.halfLeft.destroy(true)
-		this.halfRight.destroy(true)
+		this.halfLeft.destroy(false)
+		this.halfRight.destroy(false)
+		// destroy nearby enemies
+		if (hasScore) {
+			var thisLine = this.getThisLine()
+			for (var i = 0; i < objects.length; i++) {
+				var e = objects[i]
+				if (! (e instanceof Enemy)) continue
+				if (e instanceof Barbell) continue
+				if (e instanceof BarbellEnd) continue
+				var d = thisLine.distanceToPoint(new THREE.Vector3(e.pos.x, 0, e.pos.y))
+				if (d < 5) {
+					e.destroy(true)
+					i -= 1;
+				}
+			}
+		}
 	}
 	getGeometry() {
 		var barbellWidth = 8;
@@ -1499,8 +1510,9 @@ class Barbell extends Enemy {
 	}
 	tick() {
 		// update everything
-		var thisLine = this.setAllMeshRotationsAndPositions_AndReturnThisLine();
+		this.setAllMeshRotationsAndPositions();
 		// check for collisions
+		var thisLine = this.getThisLine()
 		for (var i = 0; i < objects.length; i++) {
 			var e = objects[i]
 			if (e instanceof Player) {
@@ -1516,7 +1528,7 @@ class Barbell extends Enemy {
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 	}
-	setAllMeshRotationsAndPositions_AndReturnThisLine() {
+	setAllMeshRotationsAndPositions() {
 		// get center pos
 		this.pos.x = (this.halfLeft.pos.x + this.halfRight.pos.x) / 2
 		this.pos.y = (this.halfLeft.pos.y + this.halfRight.pos.y) / 2
@@ -1542,10 +1554,11 @@ class Barbell extends Enemy {
 		// update half mesh positions
 		this.halfLeft.updateMeshPos()
 		this.halfRight.updateMeshPos()
-		// return this line
+	}
+	getThisLine() {
 		return new THREE.Line3(
-			new THREE.Vector3(leftVector.x  + this.pos.x, 0, leftVector.y  + this.pos.y),
-			new THREE.Vector3(rightVector.x + this.pos.x, 0, rightVector.y + this.pos.y)
+			new THREE.Vector3(this.halfLeft.pos.x, 0, this.halfLeft.pos.y),
+			new THREE.Vector3(this.halfRight.pos.x, 0, this.halfRight.pos.y)
 		)
 	}
 }
@@ -1585,7 +1598,6 @@ class BarbellEnd extends Enemy {
 				})
 			}
 		}
-		console.log(lines)
 		return lines
 	}
 	getColor() {
@@ -1615,26 +1627,19 @@ class BarbellEnd extends Enemy {
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 	}
-	/**
-	 * @param {boolean} hasScore
-	 */
-	destroy(hasScore) {
-		super.destroy(false)
-		// destroy nearby enemies
-		if (hasScore) {
-			for (var i = 0; i < objects.length; i++) {
-				var e = objects[i]
-				var d = dist(this.pos, e.pos)
-				if (e instanceof Enemy && (!(e instanceof BarbellEnd)) && d < 4) {
-					console.log(e, d)
-					e.destroy(false)
-				}
-			}
-		}
-	}
 }
 (new Grid(0, 0)).spawn();
 (new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
+// (() => {
+// 	var b = new Barbell(BOARD_SIZE / 2, (BOARD_SIZE / 2) - 1);
+// 	b.spawn();
+// 	b.halfLeft.v = new THREE.Vector2(0, 1)
+// 	b.halfRight.v = new THREE.Vector2(0, 1)
+// })();
+// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
+// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
+// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
+// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
 
 /** @type {Object<string, { highScore: number, spawner: () => EnemySpawner }>} */
 var game_modes = {
@@ -1824,7 +1829,19 @@ function updateRender() {
 }
 
 var frameTime = 0
+var fixTime = 0
 function animate() {
+	fixTime += 1
+	if (fixTime >= 20) {
+		fixTime = 0
+		// fix scene
+		for (var e of [...scene.children]) {
+			scene.remove(e)
+		}
+		for (var o of [...objects]) {
+			scene.add(o.mesh)
+		}
+	}
 	// default frame rate = 120
 	frameTime += 120 / frameRate
 	while (frameTime > 1) {
