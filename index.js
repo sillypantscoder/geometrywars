@@ -442,7 +442,8 @@ class RandomEnemySpawner extends EnemySpawner {
 				{ item: (x, y) => new Pinwheel(x, y),    weight: 4 },
 				{ item: (x, y) => new OrangeArrow(x, y,
 					choice(Object.values(Dir)).vector),  weight: 2 },
-				{ item: (x, y) => new PurpleBox(x, y),   weight: 0.5 }
+				{ item: (x, y) => new PurpleBox(x, y),   weight: 0.5 },
+				{ item: (x, y) => new GreenSquare(x, y), weight: 1 }
 			]
 			var selectedCreator = choice_weighted(choices)
 			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
@@ -1061,6 +1062,113 @@ class OrangeArrow extends Enemy {
 		// Rotate around pointing axis (so it is spinning)
 		// (The reason we rotate around 1,0,0 is because the X axis was rotated in the previous step)
 		this.mesh.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.axisRotation))
+	}
+	getRiceAmount() {
+		return super.getRiceAmount() + 1
+	}
+}
+class GreenSquare extends Enemy {
+	/**
+	 * @param {number} x
+	 * @param {number} y
+	 */
+	constructor(x, y) {
+		super(x, y)
+		this.vx = 0
+		this.vy = 0
+	}
+	getGeometry() {
+		const S = 2;
+		var frontPoints = [
+			// outline
+			{ from: { x: -S, z: -S }, to: { x:  S, z: -S } },
+			{ from: { x:  S, z: -S }, to: { x:  S, z:  S } },
+			{ from: { x:  S, z:  S }, to: { x: -S, z:  S } },
+			{ from: { x: -S, z:  S }, to: { x: -S, z: -S } },
+			// inside
+			{ from: { x:  0, z: -S }, to: { x: S, z:  0 } },
+			{ from: { x:  S, z:  0 }, to: { x: 0, z:  S } },
+			{ from: { x:  0, z: S }, to: { x: -S, z:  0 } },
+			{ from: { x: -S, z: 0 }, to: { x:  0, z: -S } }
+		]
+		return [
+			...frontPoints.map((v) => ({
+				from: { x: v.from.x, y: 0, z: v.from.z },
+				to:   { x: v.to.x,   y: 0, z: v.to.z   }
+			})),
+			...frontPoints.map((v) => ({
+				from: { x: v.from.x, y: -1.5, z: v.from.z },
+				to:   { x: v.to.x,   y: -1.5, z: v.to.z   }
+			})),
+			...frontPoints.slice(0, 4).map((v) => ({
+				from: { x: v.from.x, y: 0,    z: v.from.z },
+				to:   { x: v.from.x, y: -1.5, z: v.from.z }
+			}))
+		];
+	}
+	getColor() {
+		return 0x55FF66;
+	}
+	tick() {
+		/** @type {LineObject} */
+		var target = this;
+		var targetDist = 1000000;
+		/** @type {Bullet[]} */
+		var non_targets = []
+		for (var i = 0; i < objects.length; i++) {
+			var e = objects[i]
+			if (e == this) continue;
+			if (e instanceof Bullet) {
+				non_targets.push(e)
+			}
+			if (e instanceof Player) {
+				var d = dist(this.pos, e.pos)
+				if (d < targetDist) {
+					target = e;
+					targetDist = d;
+				}
+			}
+		}
+		// go towards player
+		var diff = new THREE.Vector2(target.mesh.position.x - this.pos.x, target.mesh.position.z - this.pos.y)
+		diff = diff.normalize().multiplyScalar(0.0125 * Math.random());
+		this.vx += diff.x
+		this.vy += diff.y
+		// go away from bullets
+		for (var i = 0; i < non_targets.length; i++) {
+			var d = dist(this.pos, non_targets[i].pos)
+			if (d > 1) continue;
+			var diff = new THREE.Vector2(non_targets[i].pos.x - this.pos.x, non_targets[i].pos.y - this.pos.y)
+			diff = diff.normalize().multiplyScalar(-0.2 * Math.random());
+			this.vx += diff.x
+			this.vy += diff.y
+		}
+		// move
+		this.vx *= 1 - (Math.sqrt(Math.random()) * 0.05)
+		this.vy *= 1 - (Math.sqrt(Math.random()) * 0.05)
+		this.pos.x += this.vx;
+		this.pos.y += this.vy;
+		// bounce
+		if (this.pos.x <= 0) {
+			this.vx = 0
+			this.pos.x = 0
+		}
+		if (this.pos.y <= 0) {
+			this.vy = 0
+			this.pos.y = 0
+		}
+		if (this.pos.x >= BOARD_SIZE) {
+			this.vx = 0
+			this.pos.x = BOARD_SIZE
+		}
+		if (this.pos.y >= BOARD_SIZE) {
+			this.vy = 0
+			this.pos.y = BOARD_SIZE
+		}
+		// set mesh
+		this.mesh.position.x = this.pos.x
+		this.mesh.position.z = this.pos.y
+		super.tick()
 	}
 	getRiceAmount() {
 		return super.getRiceAmount() + 1
