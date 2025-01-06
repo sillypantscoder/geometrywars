@@ -727,15 +727,17 @@ class Rice extends LineObject {
 		return 0x00FF33;
 	}
 	tick() {
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
-			if (! (e instanceof Player)) continue;
-			var d = dist(this.pos, e.pos)
-			if (d < 1.5) {
-				// Pickup
-				this.remove()
-				multiplier += 1;
-				(new RiceCollection(this.pos.x, this.pos.y, this.mesh.rotation.y, e)).spawn();
+		if (this.time > 0) {
+			for (var i = 0; i < objects.length; i++) {
+				var e = objects[i]
+				if (! (e instanceof Player)) continue;
+				var d = dist(this.pos, e.pos)
+				if (d < 1.5) {
+					// Pickup
+					this.remove()
+					multiplier += 1;
+					(new RiceCollection(this.pos.x, this.pos.y, this.mesh.rotation.y, e)).spawn();
+				}
 			}
 		}
 		// move
@@ -1450,6 +1452,8 @@ class PurpleBoxRemnant extends Enemy {
 	}
 }
 class Barbell extends Enemy {
+	static barbellWidth = 9;
+	static streak = 0;
 	/**
 	 * @param {number} x
 	 * @param {number} y
@@ -1482,6 +1486,17 @@ class Barbell extends Enemy {
 		this.halfRight.destroy(false)
 		// destroy nearby enemies
 		if (hasScore) {
+			// streak
+			const destroyRadius = 5 + (Barbell.streak * 1.5);
+			Barbell.streak += 1;
+			objects.push(new (class StreakTimer extends LineObject {
+				constructor() { super(0, 0); this.time = 0 }
+				getGeometry() { return [] }
+				getColor() { return 0 }
+				tick() { this.time += 1; if (this.time >= 160) this.remove() }
+				remove() { super.remove(); Barbell.streak -= 1; }
+			})())
+			// find objects
 			var thisLine = this.getThisLine()
 			for (var i = 0; i < objects.length; i++) {
 				var e = objects[i]
@@ -1489,7 +1504,7 @@ class Barbell extends Enemy {
 				if (e instanceof Barbell) continue
 				if (e instanceof BarbellEnd) continue
 				var d = thisLine.distanceToPoint(new THREE.Vector3(e.pos.x, 0, e.pos.y))
-				if (d < 5) {
+				if (d < destroyRadius) {
 					e.destroy(true)
 					i -= 1;
 				}
@@ -1497,11 +1512,10 @@ class Barbell extends Enemy {
 		}
 	}
 	getGeometry() {
-		var barbellWidth = 8;
 		return [
 			{
-				from: { x: -barbellWidth, y: 0, z: 0 },
-				to:   { x:  barbellWidth, y: 0, z: 0 }
+				from: { x: -Barbell.barbellWidth, y: 0, z: 0 },
+				to:   { x:  Barbell.barbellWidth, y: 0, z: 0 }
 			}
 		]
 	}
@@ -1539,7 +1553,7 @@ class Barbell extends Enemy {
 		this.halfLeft.mesh.rotation.y = rot
 		this.halfRight.mesh.rotation.y = rot + Math.PI
 		// set half positions
-		const barbellWidth = 8/3;
+		const barbellWidth = Barbell.barbellWidth/3;
 		// 		(get half vectors from center)
 		var leftVector =  new THREE.Vector2(this.halfLeft.pos.x,  this.halfLeft.pos.y ).sub(this.pos)
 		var rightVector = new THREE.Vector2(this.halfRight.pos.x, this.halfRight.pos.y).sub(this.pos)
@@ -1630,16 +1644,6 @@ class BarbellEnd extends Enemy {
 }
 (new Grid(0, 0)).spawn();
 (new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
-// (() => {
-// 	var b = new Barbell(BOARD_SIZE / 2, (BOARD_SIZE / 2) - 1);
-// 	b.spawn();
-// 	b.halfLeft.v = new THREE.Vector2(0, 1)
-// 	b.halfRight.v = new THREE.Vector2(0, 1)
-// })();
-// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
-// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
-// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
-// (new BlueDiamond((BOARD_SIZE / 2) - 1, (BOARD_SIZE / 2) + 3)).spawn();
 
 /** @type {Object<string, { highScore: number, spawner: () => EnemySpawner }>} */
 var game_modes = {
