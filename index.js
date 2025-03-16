@@ -478,7 +478,8 @@ class WavesEnemySpawner extends EnemySpawner {
 				var x = side.x == 0 ? n/density : 0
 				var y = side.y == 0 ? n/density : 0
 				var e = new OrangeArrow(x, y, side.vector)
-				e.spawn()
+				var spawning = new Spawning(e)
+				spawning.spawn()
 			}
 			// Reset time
 			this.time = 0
@@ -491,14 +492,16 @@ class WavesEnemySpawner extends EnemySpawner {
 				var x = anti_ease(Math.random()) * BOARD_SIZE
 				var y = anti_ease(Math.random()) * BOARD_SIZE
 				var e2 = new PinkSquares(x, y)
-				e2.spawn()
+				var spawning = new Spawning(e2)
+				spawning.spawn()
 			}
 			if (this.every <= 200) {
 				// Bonus blue diamond (in one of the corners)
 				var x = Math.round(Math.random()) * BOARD_SIZE
 				var y = Math.round(Math.random()) * BOARD_SIZE
 				var e3 = new BlueDiamond(x, y)
-				e3.spawn()
+				var spawning = new Spawning(e3)
+				spawning.spawn()
 			}
 			if (this.every < 140) {
 				// More bonus pink squares
@@ -506,14 +509,16 @@ class WavesEnemySpawner extends EnemySpawner {
 					var x = Math.random() * BOARD_SIZE
 					var y = Math.random() * BOARD_SIZE
 					var e4 = new PinkSquares(x, y)
-					e4.spawn()
+					var spawning = new Spawning(e4)
+					spawning.spawn()
 				}
 				// More bonus blue diamonds
 				for (var i = 0; i < 4; i++) {
 					var x = Math.round(Math.random()) * BOARD_SIZE
 					var y = Math.round(Math.random()) * BOARD_SIZE
 					var e5 = new BlueDiamond(x, y)
-					e5.spawn()
+					var spawning = new Spawning(e5)
+					spawning.spawn()
 				}
 			}
 		}
@@ -1846,6 +1851,13 @@ function animate() {
 			scene.add(o.mesh)
 		}
 	}
+	// touch loc alias
+	if (touchLoc != null) {
+		window.dispatchEvent(new MouseEvent("mousemove", {
+			clientX: touchLoc.x,
+			clientY: touchLoc.y
+		}))
+	}
 	// default frame rate = 120
 	frameTime += 120 / frameRate
 	while (frameTime > 1) {
@@ -1875,3 +1887,28 @@ window.addEventListener("mousemove", (e) => {
 		}
 	}
 })
+
+// touches
+/** @type {null | { x: number, y: number }} */
+var touchLoc = null
+window.addEventListener("touchstart", (e) => {
+	if (e.target instanceof HTMLElement && document.querySelector("#menu")?.contains(e.target)) return
+	e.preventDefault()
+	// register
+	touchLoc = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+	return false;
+}, { passive: false })
+window.addEventListener("touchmove", (e) => {
+	if (e.target instanceof HTMLElement && document.querySelector("#menu")?.contains(e.target)) return
+	e.preventDefault()
+	// register
+	touchLoc = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+	return false;
+}, { passive: false })
+window.addEventListener("touchend", (e) => {
+	if (e.target instanceof HTMLElement && document.querySelector("#menu")?.contains(e.target)) return
+	e.preventDefault()
+	// register
+	touchLoc = null
+	return false;
+}, { passive: false })
