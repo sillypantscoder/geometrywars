@@ -1,4 +1,4 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from ws_lib import WebServer, WebSocket
 import typing
 import os
 import sys
@@ -64,108 +64,77 @@ class HttpResponse(typing.TypedDict):
 	headers: dict[str, str]
 	content: str | bytes
 
-def get(path: str, query: URLQuery, headers: SafeDict) -> HttpResponse:
-	log_existence_check()
-	if path == "/":
-		return {
-			"status": 200,
-			"headers": {
-				"Content-Type": "text/html"
-			},
-			"content": read_file("index.html")
-		}
-	elif path == "/three.js":
-		return {
-			"status": 200,
-			"headers": {
-				"Content-Type": "text/javascript"
-			},
-			"content": read_file("three.js")
-		}
-	elif path == "/OrbitControls.js":
-		return {
-			"status": 200,
-			"headers": {
-				"Content-Type": "text/javascript"
-			},
-			"content": read_file("OrbitControls.js")
-		}
-	elif path == "/index.js":
-		return {
-			"status": 200,
-			"headers": {
-				"Content-Type": "text/javascript"
-			},
-			"content": read_file("index.js")
-		}
-	else: # 404 page
-		log("404 encountered: " + path)
-		return {
-			"status": 404,
-			"headers": {
-				"Content-Type": "text/html"
-			},
-			"content": ""
-		}
-
-def post(path: str, body: bytes) -> HttpResponse:
-	bodydata = body.decode("UTF-8")
-	if path == "/":
-		log("404 POST encountered: " + path + "\n\t" + bodydata)
-		return {
-			"status": 404,
-			"headers": {
-				"Content-Type": "text/html"
-			},
-			"content": ""
-		}
-	else:
-		log("404 POST encountered: " + path)
-		return {
-			"status": 404,
-			"headers": {
-				"Content-Type": "text/html"
-			},
-			"content": ""
-		}
-
-class MyServer(BaseHTTPRequestHandler):
-	def do_GET(self):
-		# Get response
-		splitpath = self.path.split("?")
-		res = get(splitpath[0], URLQuery(''.join(splitpath[1:])), SafeDict.from_list(self.headers.items()))
-		# Send status
-		self.send_response(res["status"])
-		# Send headers
-		for h in res["headers"]:
-			self.send_header(h, res["headers"][h])
-		self.end_headers()
-		# Send content
-		c = res["content"]
-		if isinstance(c, str): c = c.encode("utf-8")
-		self.wfile.write(c)
-	def do_POST(self):
-		res = post(self.path, self.rfile.read(int(self.headers["Content-Length"])))
-		self.send_response(res["status"])
-		for h in res["headers"]:
-			self.send_header(h, res["headers"][h])
-		self.end_headers()
-		c = res["content"]
-		if isinstance(c, str): c = c.encode("utf-8")
-		self.wfile.write(c)
-	def log_message(self, _format: str, *args) -> None: # type: ignore
-		return
+class GWServer(WebServer):
+	def get(self, path: str, query: URLQuery, headers: SafeDict) -> HttpResponse:
+		log_existence_check()
+		if path == "/":
+			return {
+				"status": 200,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": read_file("index.html")
+			}
+		elif path == "/three.js":
+			return {
+				"status": 200,
+				"headers": {
+					"Content-Type": "text/javascript"
+				},
+				"content": read_file("three.js")
+			}
+		elif path == "/OrbitControls.js":
+			return {
+				"status": 200,
+				"headers": {
+					"Content-Type": "text/javascript"
+				},
+				"content": read_file("OrbitControls.js")
+			}
+		elif path == "/index.js":
+			return {
+				"status": 200,
+				"headers": {
+					"Content-Type": "text/javascript"
+				},
+				"content": read_file("index.js")
+			}
+		else: # 404 page
+			log("404 encountered: " + path)
+			return {
+				"status": 404,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": ""
+			}
+	def post(self, path: str, body: bytes) -> HttpResponse:
+		bodydata = body.decode("UTF-8")
+		if path == "/":
+			log("404 POST encountered: " + path + "\n\t" + bodydata)
+			return {
+				"status": 404,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": ""
+			}
+		else:
+			log("404 POST encountered: " + path)
+			return {
+				"status": 404,
+				"headers": {
+					"Content-Type": "text/html"
+				},
+				"content": ""
+			}
+	def websocketOpen(self, websocket: WebSocket):
+		websocket.send("hi")
+	def websocketMessage(self, websocket: WebSocket, data: str | bytes):
+		websocket.send("you said: " + data)
+	def websocketClose(self, websocket: WebSocket):
+		pass
 
 if __name__ == "__main__":
-	running = True
-	webServer = HTTPServer((hostName, serverPort), MyServer)
-	webServer.timeout = 1
-	print(f"Server started http://{hostName}:{serverPort}")
-	sys.stdout.flush()
-	while running:
-		try:
-			webServer.handle_request()
-		except KeyboardInterrupt:
-			running = False
-	webServer.server_close()
-	print("Server stopped")
+	webServer = GWServer()
+	webServer.run()

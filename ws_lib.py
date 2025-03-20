@@ -1,5 +1,5 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from crazy_ws import HTTPRequestHandler as WebsocketHandler, AbstractWebSocket as WebSocket
+from websockets import HTTPRequestHandler as WebsocketHandler, AbstractWebSocket as WebSocket
 from socketserver import ThreadingMixIn
 import socket
 import typing
@@ -181,7 +181,7 @@ function send(data) {
 	def websocketClose(self, websocket: WebSocket):
 		# By the time this function is called, `websocket` has been removed from `self.connected`,
 		# and it is considered closed. Attempting to send any more messages will throw an error!
-		# (see crazy_ws.py line 194)
+		# (see websockets.py line 194)
 		for c in self.connected:
 			c.send("websocket " + str(websocket.id) + " left")
 
