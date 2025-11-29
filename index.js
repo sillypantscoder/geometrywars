@@ -509,10 +509,10 @@ class Bullet extends LineObject {
 			}
 		}
 		// check for hit walls
-		if (this.pos.x < 0) this.destroy(false)
-		if (this.pos.y < 0) this.destroy(false)
-		if (this.pos.x > Game.BOARD_SIZE) this.destroy(false)
-		if (this.pos.y > Game.BOARD_SIZE) this.destroy(false)
+			 if (this.pos.x < 0) this.destroy(false)
+		else if (this.pos.y < 0) this.destroy(false)
+		else if (this.pos.x > Game.BOARD_SIZE) this.destroy(false)
+		else if (this.pos.y > Game.BOARD_SIZE) this.destroy(false)
 	}
 }
 class EnemySpawner extends LineObject {
@@ -874,6 +874,7 @@ class Rice extends LineObject {
 					this.remove()
 					this.game.points.multiplier += 1;
 					(new RiceCollection(this.game, this.pos.x, this.pos.y, this.mesh.rotation.y, e)).spawn();
+					return;
 				}
 			}
 		}
@@ -887,8 +888,8 @@ class Rice extends LineObject {
 		if (this.pos.y > Game.BOARD_SIZE) this.pos.y = Game.BOARD_SIZE;
 		// time
 		this.time += 1
-		if (this.time >= 375) this.mesh.visible = this.time % 2 == 0
-		if (this.time >= 450) {
+		if (this.time >= 400) this.mesh.visible = this.time % 10 < 5
+		if (this.time >= 525) {
 			this.destroy()
 		}
 		// update mesh
@@ -1389,12 +1390,12 @@ class GreenSquare extends Enemy {
 		var target = this;
 		var targetDist = 1000000;
 		/** @type {Bullet[]} */
-		var non_targets = []
+		var untargets = []
 		for (var i = 0; i < this.game.objects.length; i++) {
 			var e = this.game.objects[i]
 			if (e == this) continue;
 			if (e instanceof Bullet) {
-				non_targets.push(e)
+				untargets.push(e)
 			}
 			if (e instanceof Player) {
 				var d = dist(this.pos, e.pos)
@@ -1410,11 +1411,11 @@ class GreenSquare extends Enemy {
 		this.vx += diff.x
 		this.vy += diff.y
 		// go away from bullets
-		for (var i = 0; i < non_targets.length; i++) {
-			var d = dist(this.pos, non_targets[i].pos)
+		for (var i = 0; i < untargets.length; i++) {
+			var d = dist(this.pos, untargets[i].pos)
 			if (d > 1) continue;
-			var diff = new THREE.Vector2(non_targets[i].pos.x - this.pos.x, non_targets[i].pos.y - this.pos.y)
-			diff = diff.normalize().multiplyScalar(-0.2 * Math.random());
+			var diff = new THREE.Vector2(untargets[i].pos.x - this.pos.x, untargets[i].pos.y - this.pos.y)
+			diff = diff.normalize().multiplyScalar(-0.25 * Math.random());
 			this.vx += diff.x
 			this.vy += diff.y
 		}
@@ -1832,8 +1833,18 @@ class GameModes {
 			data.highScore = highScore
 		}
 	};
+	static createModeSelector() {
+		var pointsDisplay = (() => {
+			var e = document.querySelector("#menu")
+			if (e == null) throw new Error("menu element is missing")
+			return e
+		})();
+		pointsDisplay.innerHTML = `<div style="padding-top: 1em;">Select Game Mode:</div>` + Object.keys(GameModes.game_modes).map((v) =>
+			`<button onmousedown="new Game('${v}')">${v}</button> (high score: ${GameModes.game_modes[v].highScore})`).join("<br>");
+	}
 }
 GameModes.getHighScores();
+GameModes.createModeSelector();
 
 // // Black holes:
 // function generateBlackHolePoints() {
