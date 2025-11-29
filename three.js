@@ -7,6 +7,7 @@
 'use strict';
 
 /**
+ * @typedef {Object3D} ThreeObject3D
  * @typedef {Color} ThreeColor
  * @typedef {Vector3} ThreeVector3
  * @typedef {Vector2} ThreeVector2

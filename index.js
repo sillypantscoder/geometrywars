@@ -12,13 +12,18 @@ const Dir = {
 
 var frameRate = 60;
 (async function detectFrameRate() {
-	const trials = 200;
+	const nAvgFrames = 32;
 	var startTime = new Date();
-	for (var i = 0; i < trials; i++) {
+	while (true) {
 		await new Promise((resolve) => requestAnimationFrame(resolve))
+		// Find time diff
 		var endTime = new Date();
 		var diff = endTime.getTime() - startTime.getTime();
-		frameRate = Math.round(trials / (diff / 1000));
+		// Average frame times
+		var thisFrameRate = 1000 / diff;
+		frameRate = ((frameRate * nAvgFrames) + thisFrameRate) / (nAvgFrames + 1)
+		// Reset time
+		startTime = new Date();
 	}
 })();
 
