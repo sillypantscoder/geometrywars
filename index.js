@@ -276,7 +276,10 @@ class LineObject {
 	}
 	spawn() {
 		this.game.objects.push(this);
-		this.game.scene.three_scene .add(this.mesh);
+		this.game.scene.three_scene.add(this.mesh);
+	}
+	isAlive() {
+		return this.game.objects.includes(this);
 	}
 	tick() {}
 	remove() {
@@ -330,6 +333,56 @@ class ObjectDeathParticle extends LineObject {
 		var displayOpacity = 1 - ((this.a - 1) * (this.a - 1));
 		this.mesh.material = new THREE.LineBasicMaterial( { color: this.color.multiplyScalar(displayOpacity) } );
 		if (this.a < 0.7) this.remove()
+	}
+}
+class ExplosionParticleSet extends LineObject {
+	/**
+	 * @param {Game} game
+	 * @param {number} x
+	 * @param {number} y
+	 * @param {number} color
+	 */
+	constructor(game, x, y, color) {
+		super(game, x, y)
+		this.color = new THREE.Color(color);
+		this.mesh = Utils.createMeshFromLines(this.getGeometry(), color)
+		this.mesh.position.set(x, -0.5, y);
+		this.mesh.scale.set(0, 0, 0);
+		this.scale = 0;
+		this.scaleV = 0.04;
+		this.scaleFriction = 0.99;
+		this.opacity = 1;
+		this.opacityV = 0.001;
+	}
+	getGeometry() {
+		/**
+		 * @type {Line[]}
+		 */
+		var lines = [];
+		for (var i = 0; i < 90; i++) {
+			var angle = Math.random() * Math.PI * 2;
+			var radStart = 1 + (Math.random() * 4);
+			var radEnd = radStart + (Math.random() * 0.25);
+			// get coordinates
+			var x1 = Math.cos(angle) * radStart;
+			var y1 = Math.sin(angle) * radStart;
+			var x2 = Math.cos(angle) * radEnd;
+			var y2 = Math.sin(angle) * radEnd;
+			lines.push({
+				from: { x: x1, y: 0, z: y1 },
+				to:   { x: x2, y: 0, z: y2 }
+			})
+		}
+		return lines;
+	}
+	getColor() { return 0; }
+	tick() {
+		this.scale += this.scaleV
+		this.scale *= this.scaleFriction
+		this.mesh.scale.set(this.scale, this.scale, this.scale);
+		this.opacity -= this.opacityV;
+		this.mesh.material = new THREE.LineBasicMaterial( { color: this.color.multiplyScalar(this.opacity) } );
+		if (this.opacity < 0) this.remove()
 	}
 }
 class Grid extends LineObject {
@@ -494,6 +547,7 @@ class Bullet extends LineObject {
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 		// check for collisions
+		if (! this.isAlive()) return;
 		var es = [...this.game.objects]
 		for (var i = 0; i < es.length; i++) {
 			var e = es[i]
@@ -961,6 +1015,7 @@ class Enemy extends LineObject {
 	 */
 	destroy(hasScore) {
 		super.destroy(hasScore);
+		// Rice
 		if (hasScore) {
 			this.game.points.amount += this.game.points.multiplier;
 			var rice = this.getRiceAmount();
@@ -970,6 +1025,13 @@ class Enemy extends LineObject {
 				if (i == 3) r.important = true;
 			}
 		}
+		// Large explosion particles
+		var x = new ExplosionParticleSet(this.game, this.pos.x, this.pos.y, this.getColor());
+		x.spawn();
+		var x2 = new ExplosionParticleSet(this.game, this.pos.x, this.pos.y, this.getColor());
+		x2.spawn();
+		var x3 = new ExplosionParticleSet(this.game, this.pos.x, this.pos.y, 0xffffff);
+		x3.spawn();
 	}
 	getRiceAmount() {
 		return 1 + Math.floor(Math.random() * 3);
@@ -1506,7 +1568,7 @@ class PurpleBox extends Enemy {
 			}
 		}
 		var diff = new THREE.Vector2(target.mesh.position.x - this.pos.x, target.mesh.position.z - this.pos.y)
-		diff = diff.normalize().multiplyScalar(0.001);
+		diff = diff.normalize().multiplyScalar(0.0015);
 		this.vx += diff.x
 		this.vy += diff.y
 		this.vx *= 0.995
@@ -1704,8 +1766,12 @@ class Barbell extends Enemy {
 	remove() {
 		super.remove()
 		// destroy halves
-		this.halfLeft.destroy(false)
-		this.halfRight.destroy(false)
+		try {
+			this.halfLeft.destroy(false)
+		} catch {}
+		try {
+			this.halfRight.destroy(false)
+		} catch {}
 	}
 	/**
 	 * @param {boolean} hasScore
