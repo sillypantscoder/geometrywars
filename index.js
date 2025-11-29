@@ -1,7 +1,10 @@
 /**
  * @typedef {{ from: { x: number, y: number, z: number }, to: { x: number, y: number, z: number } }} Line
+ */
+
+/**
  * @typedef {'UP' | 'DOWN' | 'LEFT' | 'RIGHT'} Direction
- * @type {Object<string, { x: number, y: number, sign: boolean, vector: ThreeVector2 }>}
+ * @type {Object<Direction, { x: number, y: number, sign: boolean, vector: ThreeVector2 }>}
  */
 const Dir = {
 	'UP':    { x: 0, y: -1, sign: false, vector: new THREE.Vector2( 0,-1) },
@@ -9,23 +12,6 @@ const Dir = {
 	'LEFT':  { x: -1, y: 0, sign: false, vector: new THREE.Vector2(-1, 0) },
 	'RIGHT': { x:  1, y: 0, sign: true,  vector: new THREE.Vector2( 1, 0) }
 }
-
-var frameRate = 60;
-(async function detectFrameRate() {
-	const nAvgFrames = 32;
-	var startTime = new Date();
-	while (true) {
-		await new Promise((resolve) => requestAnimationFrame(resolve))
-		// Find time diff
-		var endTime = new Date();
-		var diff = endTime.getTime() - startTime.getTime();
-		// Average frame times
-		var thisFrameRate = 1000 / diff;
-		frameRate = ((frameRate * nAvgFrames) + thisFrameRate) / (nAvgFrames + 1)
-		// Reset time
-		startTime = new Date();
-	}
-})();
 
 const ease = (/** @type {number} */ x) => x < 0.5 ? (2*x*x) : ((-2*x*x)+(4*x)+-1);
 const anti_ease = (/** @type {number} */ x) => x < 0.5 ? (0.5*x) : (1-(0.5*(1-x)));
@@ -43,120 +29,231 @@ function getArrowKeyVector() {
 	return v;
 }
 
-const BOARD_SIZE = 30;
-
-var points = 0;
-var multiplier = 1;
-var pointsDisplay = (() => {
-	var e = document.querySelector("#menu")
-	if (e == null) throw new Error("menu element is missing")
-	return e
-})();
-
-/**
- * @template {any} T
- * @param {T[]} items
- * @returns {T}
- */
-function choice(items) { return items[Math.floor(Math.random()*items.length)]; }
-/**
- * @template {any} T
- * @param {{ item: T, weight: number }[]} items
- * @returns {T}
- */
-function choice_weighted(items) {
-	const totalWeight = items.map(i => i.weight).reduce((a, b) => a + b);
-	const target = Math.random() * totalWeight;
-	let sum = 0;
-	for (const item of items) {
-		sum += item.weight;
-		if (sum > target) return item.item;
+class Utils {
+	/**
+	 * @template {any} T
+	 * @param {T[]} items
+	 * @returns {T}
+	 */
+	static choice(items) { return items[Math.floor(Math.random()*items.length)]; }
+	/**
+	 * @template {any} T
+	 * @param {{ item: T, weight: number }[]} items
+	 * @returns {T}
+	 */
+	static choice_weighted(items) {
+		const totalWeight = items.map(i => i.weight).reduce((a, b) => a + b);
+		const target = Math.random() * totalWeight;
+		let sum = 0;
+		for (const item of items) {
+			sum += item.weight;
+			if (sum > target) return item.item;
+		}
+		return items[items.length - 1].item;
 	}
-	return items[items.length - 1].item;
-}
-
-/**
- * @param {number} width
- * @param {number} height
- */
-function makeCamera(width, height) {
-	var cam = new THREE.PerspectiveCamera( 75, width / height, 0.1, 1000 );
-	cam.position.x = 0;
-	cam.position.y = (0.0075) * ((width + height));
-	cam.position.z = 0;
-	cam.lookAt(cam.position.x, 0, cam.position.z)
-	return cam;
-}
-const scene = new THREE.Scene();
-var camera = makeCamera(window.innerWidth, window.innerHeight);
-
-const renderer = new THREE.WebGLRenderer({ alpha: true });
-renderer.setClearColor( 0x000000, 0 );
-renderer.setSize( window.innerWidth, window.innerHeight );
-document.body.appendChild( renderer.domElement );
-
-/**
- * @param {any} width
- * @param {any} height
- */
-function resize(width, height) {
-	camera = makeCamera(width, height);
-	renderer.setSize(width, height);
-	var blurcanvas_elm = document.getElementById("blurcanvas")
-	if (blurcanvas_elm == null) throw new Error("can't find the blur canvas :(((((")
-	if (! (blurcanvas_elm instanceof HTMLCanvasElement)) throw new Error("blur canvas is not a canvas :(((((")
-	blurcanvas_elm.width = width
-	blurcanvas_elm.height = height
-}
-window.addEventListener("resize", () => {
-	resize(window.innerWidth, window.innerHeight);
-});
-
-// const controls = new OrbitControls( camera, renderer.domElement );
-// controls.target.set(camera.position.x, 0, camera.position.z);
-// controls.update();
-
-/**
- * @param {Line[]} points
- * @returns {ThreeBufferGeometry}
- */
-function makeBufferGeometryFromLines(points) {
-	var vertices_array = []
-	for (var i = 0; i < points.length; i++) {
-		var p = points[i]
-		vertices_array.push(
-			p.from.x, p.from.y, p.from.z,
-			p.to.x,   p.to.y,   p.to.z
-		)
+	/**
+	* @param {Line[]} points
+	* @returns {ThreeBufferGeometry}
+	*/
+	static makeBufferGeometryFromLines(points) {
+		var vertices_array = []
+		for (var i = 0; i < points.length; i++) {
+			var p = points[i]
+			vertices_array.push(
+				p.from.x, p.from.y, p.from.z,
+				p.to.x,   p.to.y,   p.to.z
+			)
+		}
+		const vertices = new Float32Array(vertices_array);
+		const geometry = new THREE.BufferGeometry( );
+		geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
+		return geometry
 	}
-	const vertices = new Float32Array(vertices_array);
-	const geometry = new THREE.BufferGeometry( );
-	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
-	return geometry
-}
-/**
- * @param {Line[]} lines
- * @param {number} color
- */
-function createMeshFromLines(lines, color) {
-	var geometry = makeBufferGeometryFromLines(lines)
-	var material = new THREE.LineBasicMaterial( { color } )
-	var mesh = new THREE.LineSegments( geometry, material );
-	return mesh
+	/**
+	 * @param {Line[]} lines
+	 * @param {number} color
+	 */
+	static createMeshFromLines(lines, color) {
+		var geometry = Utils.makeBufferGeometryFromLines(lines)
+		var material = new THREE.LineBasicMaterial( { color } )
+		var mesh = new THREE.LineSegments( geometry, material );
+		return mesh
+	}
 }
 
-/** @type {LineObject[]} */
-var objects = []
+class Scene {
+	/**
+	 * @param {number} width
+	 * @param {number} height
+	 */
+	static makeCamera(width, height) {
+		var cam = new THREE.PerspectiveCamera( 75, width / height, 0.1, 1000 );
+		cam.position.x = 0;
+		cam.position.y = (0.0075) * ((width + height));
+		cam.position.z = 0;
+		cam.lookAt(cam.position.x, 0, cam.position.z)
+		return cam;
+	}
+	/**
+	 * @param {string} gamemode
+	 * @param {{ amount: number, multiplier: number, displayElement: Element }} points
+	 */
+	constructor(gamemode, points) {
+		this.gamemode = gamemode
+		this.points = points
+
+		this.three_scene  = new THREE.Scene();
+		this.camera = Scene.makeCamera(window.innerWidth, window.innerHeight);
+
+		this.renderer = new THREE.WebGLRenderer({ alpha: true });
+		this.renderer.setClearColor( 0x000000, 0 );
+		this.renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( this.renderer.domElement );
+		window.addEventListener("resize", (() => {
+			this.resize(window.innerWidth, window.innerHeight);
+		}).bind(this));
+
+		this.blurcanvas = (() => {
+			var c = document.querySelector("#blurcanvas")
+			if (c == null) throw new Error("can't find the blur canvas")
+			if (! (c instanceof HTMLCanvasElement)) throw new Error("blur canvas is not a canvas")
+			c.width = window.innerWidth
+			c.height = window.innerHeight
+			// get context
+			var r = c.getContext('2d')
+			if (r == null) throw new Error("canvas has wrong rendering context...?!")
+			return r
+		})();
+	}
+	/**
+	 * @param {any} width
+	 * @param {any} height
+	 */
+	resize(width, height) {
+		this.camera = Scene.makeCamera(width, height);
+		this.renderer.setSize(width, height);
+		var blurcanvas_elm = document.getElementById("blurcanvas")
+		if (blurcanvas_elm == null) throw new Error("can't find the blur canvas :(((((")
+		if (! (blurcanvas_elm instanceof HTMLCanvasElement)) throw new Error("blur canvas is not a canvas :(((((")
+		blurcanvas_elm.width = width
+		blurcanvas_elm.height = height
+	}
+	updateRender() {
+		// render
+		this.renderer.render(this.three_scene, this.camera);
+		this.blurcanvas.fillStyle = "black"
+		this.blurcanvas.fillRect(0, 0, window.innerWidth, window.innerHeight)
+		this.blurcanvas.drawImage(this.renderer.domElement, 0, 0)
+		// score
+		var highScore = GameModes.game_modes[this.gamemode].highScore
+		this.points.displayElement.innerHTML = `Points: ${this.points.amount}<br><small>x${this.points.multiplier}</small><br><small>High score: ${highScore}</small>`
+	}
+}
+class Animator {
+	static frameRate = 60;
+	static async detectFrameRate() {
+		const nAvgFrames = 32;
+		var startTime = new Date();
+		while (true) {
+			await new Promise((resolve) => requestAnimationFrame(resolve))
+			// Find time diff
+			var endTime = new Date();
+			var diff = endTime.getTime() - startTime.getTime();
+			// Average frame times
+			var thisFrameRate = 1000 / diff;
+			Animator.frameRate = ((Animator.frameRate * nAvgFrames) + thisFrameRate) / (nAvgFrames + 1)
+			// Reset time
+			startTime = new Date();
+		}
+	}
+	/**
+	 * @param {() => void} ticker
+	 * @param {() => void} renderer
+	 */
+	constructor(ticker, renderer) {
+		this.frameTime = 0;
+		this.ticker = ticker
+		this.renderer = renderer
+	}
+	animate() {
+		// touch loc alias
+		if (touchLoc != null) {
+			window.dispatchEvent(new MouseEvent("mousemove", {
+				clientX: touchLoc.x,
+				clientY: touchLoc.y
+			}))
+		}
+		// default frame rate = 120
+		this.frameTime += 120 / Animator.frameRate
+		while (this.frameTime > 1) {
+			this.frameTime -= 1
+			this.ticker()
+		}
+		this.renderer()
+		// Animation loop
+		requestAnimationFrame(this.animate.bind(this))
+	}
+}
+class Game {
+	static BOARD_SIZE = 30;
+	/**
+	 * @param {string} gamemode
+	 */
+	constructor(gamemode) {
+		this.gamemode = gamemode
+		// Points
+		this.points = {
+			amount: 0,
+			multiplier: 1,
+			displayElement: (() => {
+				var e = document.querySelector("#menu")
+				if (e == null) throw new Error("menu element is missing")
+				return e
+			})()
+		};
+		// Scene
+		this.scene = new Scene(gamemode, this.points)
+		// Objects
+		/** @type {LineObject[]} */
+		this.objects = [];
+		(new Grid(this, 0, 0)).spawn();
+		(new Player(this, Game.BOARD_SIZE / 2, Game.BOARD_SIZE / 2)).spawn();
+		GameModes.game_modes[gamemode].spawner(this).spawn();
+		// Click listener
+		window.addEventListener("mousemove", ((/** @type {MouseEvent} */ e) => {
+			// find player
+			var s = [...this.objects]
+			for (var i = 0; i < s.length; i++) {
+				var o = s[i];
+				if (o instanceof Player) {
+					o.shoot(e.clientX, e.clientY)
+				}
+			}
+		}).bind(this))
+		// Animator
+		this.animator = new Animator(this.doTick.bind(this), this.scene.updateRender.bind(this.scene));
+		this.animator.animate();
+	}
+	doTick() {
+		// scene
+		var objects = [...this.objects];
+		for (var e of objects) {
+			e.tick();
+		}
+	}
+}
 
 class LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
+	constructor(game, x, y) {
+		this.game = game
 		this.pos = { x, y }
 		this.lines = this.getGeometry()
-		this.mesh = createMeshFromLines(this.lines, this.getColor())
+		this.mesh = Utils.createMeshFromLines(this.lines, this.getColor())
 		this.mesh.position.set(x, 0, y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 	}
@@ -178,13 +275,14 @@ class LineObject {
 		this.mesh.position.set(x, 0, y);
 	}
 	spawn() {
-		objects.push(this);
-		scene.add(this.mesh);
+		this.game.objects.push(this);
+		this.game.scene.three_scene .add(this.mesh);
 	}
 	tick() {}
 	remove() {
-		objects.splice(objects.indexOf(this), 1)
-		scene.remove(this.mesh);
+		if (this.game.objects.indexOf(this) == -1) throw new Error("Cannot remove an object because this object is not in the scene");
+		this.game.objects.splice(this.game.objects.indexOf(this), 1)
+		this.game.scene.three_scene.remove(this.mesh);
 	}
 	/**
 	 * @param {boolean} hasScore
@@ -192,13 +290,14 @@ class LineObject {
 	destroy(hasScore) {
 		this.remove()
 		for (var i = 0; i < this.lines.length; i++) {
-			var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
+			var p = new ObjectDeathParticle(this.game, this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
 			p.spawn()
 		}
 	}
 }
-class DeathParticle extends LineObject {
+class ObjectDeathParticle extends LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 * @param {Line} line
@@ -207,17 +306,17 @@ class DeathParticle extends LineObject {
 	 * @param {number} ry
 	 * @param {number} rz
 	 */
-	constructor(x, y, line, color, rx, ry, rz) {
-		super(x, y)
+	constructor(game, x, y, line, color, rx, ry, rz) {
+		super(game, x, y)
 		this.color = new THREE.Color(color);
-		this.mesh = createMeshFromLines([line], color)
+		this.mesh = Utils.createMeshFromLines([line], color)
 		this.mesh.position.set(x, -0.01, y);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 		this.mesh.rotation.set(rx, ry, rz)
 		this.v = THREE.Vector2.randomUnitVector_KindaBiasedTowardsDiagonals().multiplyScalar(0.05 * Math.random());
 		this.rv = (Math.random() - 0.5) * 0.1;
 		this.a = 1;
-		this.av = 0.001;
+		this.av = 0.002;
 	}
 	getGeometry() { return [] }
 	getColor() { return 0; }
@@ -256,12 +355,12 @@ class Grid extends LineObject {
 		const P = 0.2
 		lines = [
 			...lines.map((v) => ({
-				from: { x: v.from.x <0 ? 0 : BOARD_SIZE, z: v.from.z <0 ? 0 : BOARD_SIZE },
-				to:   { x: v.to.x   <0 ? 0 : BOARD_SIZE, z: v.to.z   <0 ? 0 : BOARD_SIZE }
+				from: { x: v.from.x <0 ? 0 : Game.BOARD_SIZE, z: v.from.z <0 ? 0 : Game.BOARD_SIZE },
+				to:   { x: v.to.x   <0 ? 0 : Game.BOARD_SIZE, z: v.to.z   <0 ? 0 : Game.BOARD_SIZE }
 			})),
 			...lines.map((v) => ({
-				from: { x: v.from.x <0 ? -P : BOARD_SIZE+P, z: v.from.z <0 ? -P : BOARD_SIZE+P },
-				to:   { x: v.to.x   <0 ? -P : BOARD_SIZE+P, z: v.to.z   <0 ? -P : BOARD_SIZE+P }
+				from: { x: v.from.x <0 ? -P : Game.BOARD_SIZE+P, z: v.from.z <0 ? -P : Game.BOARD_SIZE+P },
+				to:   { x: v.to.x   <0 ? -P : Game.BOARD_SIZE+P, z: v.to.z   <0 ? -P : Game.BOARD_SIZE+P }
 			}))
 		]
 		const M = 10/3;
@@ -276,11 +375,12 @@ class Grid extends LineObject {
 }
 class Player extends LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.direction = 0
 		this.shootTime = 0
 		this.canShoot = true
@@ -311,12 +411,12 @@ class Player extends LineObject {
 		this.pos.y += newDirectionVector.y
 		// borders
 		if (this.pos.x <= 0) this.pos.x = 0
-		if (this.pos.x >= BOARD_SIZE) this.pos.x = BOARD_SIZE
+		if (this.pos.x >= Game.BOARD_SIZE) this.pos.x = Game.BOARD_SIZE
 		if (this.pos.y <= 0) this.pos.y = 0
-		if (this.pos.y >= BOARD_SIZE) this.pos.y = BOARD_SIZE
+		if (this.pos.y >= Game.BOARD_SIZE) this.pos.y = Game.BOARD_SIZE
 		// update camera/mesh positions
-		camera.position.x = this.pos.x
-		camera.position.z = this.pos.y
+		this.game.scene.camera.position.x = this.pos.x
+		this.game.scene.camera.position.z = this.pos.y
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 		this.mesh.rotation.y = ((this.mesh.rotation.y * 9) + this.direction) / 10
@@ -333,7 +433,7 @@ class Player extends LineObject {
 		var diffY = targetY - (window.innerHeight / 2)
 		var angle = Math.atan2(diffY, diffX)
 		for (var bulletAngle of [angle - 0.08, angle, angle + 0.08]) {
-			var b = new Bullet(this.pos.x, this.pos.y, Math.cos(bulletAngle), Math.sin(bulletAngle))
+			var b = new Bullet(this.game, this.pos.x, this.pos.y, Math.cos(bulletAngle), Math.sin(bulletAngle))
 			b.spawn()
 		}
 	}
@@ -341,7 +441,7 @@ class Player extends LineObject {
 		this.remove()
 		for (var n = 0; n < 15; n++) {
 			for (var i = 0; i < this.lines.length; i++) {
-				var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
+				var p = new ObjectDeathParticle(this.game, this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
 				p.spawn()
 				p.v.multiplyScalar(2.5)
 				p.av *= 0.25;
@@ -351,27 +451,29 @@ class Player extends LineObject {
 	remove() {
 		super.remove()
 		// destroy everything
-		for (var i = 0; i < objects.length; i++) {
-			if (objects[i] instanceof Grid) continue;
-			if (objects[i] instanceof DeathParticle) continue;
-			if (objects[i] instanceof DeathIndicator) continue;
-			objects[i].destroy(false);
+		for (var i = 0; i < this.game.objects.length; i++) {
+			var obj = this.game.objects[i];
+			if (obj instanceof Grid) continue;
+			if (obj instanceof ObjectDeathParticle) continue;
+			if (obj instanceof DeathCauseIndicator) continue;
+			obj.destroy(false);
 			i -= 1;
 		}
 		// save score
-		var previousScore = parseInt(localStorage.getItem("HighScore" + selectedGameMode) ?? "0")
-		localStorage.setItem("HighScore" + selectedGameMode, String(Math.max(previousScore, points)))
+		var previousScore = parseInt(localStorage.getItem("HighScore" + this.game.gamemode) ?? "0")
+		localStorage.setItem("HighScore" + this.game.gamemode, String(Math.max(previousScore, this.game.points.amount)))
 	}
 }
 class Bullet extends LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 * @param {number} vx
 	 * @param {number} vy
 	 */
-	constructor(x, y, vx, vy) {
-		super(x, y)
+	constructor(game, x, y, vx, vy) {
+		super(game, x, y)
 		this.directionXY = new THREE.Vector2(vx, vy).normalize()
 		this.directionRad = (Math.PI * -0.5) - Math.atan2(vy, vx)
 		this.mesh.rotation.y = this.directionRad
@@ -392,7 +494,7 @@ class Bullet extends LineObject {
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 		// check for collisions
-		var es = [...objects]
+		var es = [...this.game.objects]
 		for (var i = 0; i < es.length; i++) {
 			var e = es[i]
 			if (e instanceof Barbell) continue
@@ -409,14 +511,17 @@ class Bullet extends LineObject {
 		// check for hit walls
 		if (this.pos.x < 0) this.destroy(false)
 		if (this.pos.y < 0) this.destroy(false)
-		if (this.pos.x > BOARD_SIZE) this.destroy(false)
-		if (this.pos.y > BOARD_SIZE) this.destroy(false)
+		if (this.pos.x > Game.BOARD_SIZE) this.destroy(false)
+		if (this.pos.y > Game.BOARD_SIZE) this.destroy(false)
 	}
 }
 class EnemySpawner extends LineObject {
-	constructor() {
-		super(0, 0)
-		scene.remove(this.mesh);
+	/**
+	 * @param {Game} game
+	 */
+	constructor(game) {
+		super(game, 0, 0)
+		this.game.scene.three_scene.remove(this.mesh);
 		this.time = 0
 	}
 	getGeometry() { return [] }
@@ -426,27 +531,31 @@ class EnemySpawner extends LineObject {
 	}
 }
 class RandomEnemySpawner extends EnemySpawner {
-	constructor() {
-		super()
+	/**
+	 * @param {Game} game
+	 */
+	constructor(game) {
+		super(game)
 		this.every = 110
 	}
 	tick() {
 		super.tick()
 		if (this.time >= this.every) {
+			const G = this.game;
 			/** @type {{ item: (x: number, y: number) => Enemy, weight: number }[]} */
 			var choices = [
-				{ item: (x, y) => new BlueDiamond(x, y), weight: 2 },
-				{ item: (x, y) => new PinkSquares(x, y), weight: 4 },
-				{ item: (x, y) => new Pinwheel(x, y),    weight: 4 },
-				{ item: (x, y) => new OrangeArrow(x, y,
-					choice(Object.values(Dir)).vector),  weight: 2 },
-				{ item: (x, y) => new PurpleBox(x, y),   weight: 0.5 },
-				{ item: (x, y) => new GreenSquare(x, y), weight: 0.5 },
-				{ item: (x, y) => new Barbell(x, y), weight: 0.5 }
+				{ item: (x, y) => new BlueDiamond(G, x, y), weight: 2 },
+				{ item: (x, y) => new PinkSquares(G, x, y), weight: 4 },
+				{ item: (x, y) => new Pinwheel(G, x, y),    weight: 4 },
+				{ item: (x, y) => new OrangeArrow(G, x, y,
+					Utils.choice(Object.values(Dir)).vector),  weight: 2 },
+				{ item: (x, y) => new PurpleBox(G, x, y),   weight: 0.5 },
+				{ item: (x, y) => new GreenSquare(G, x, y), weight: 0.5 },
+				{ item: (x, y) => new Barbell(G, x, y), weight: 0.5 }
 			]
-			var selectedCreator = choice_weighted(choices)
-			var newEnemy = selectedCreator(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE)
-			var spawning = new Spawning(newEnemy)
+			var selectedCreator = Utils.choice_weighted(choices)
+			var newEnemy = selectedCreator(Math.random() * Game.BOARD_SIZE, Math.random() * Game.BOARD_SIZE)
+			var spawning = new Spawning(G, newEnemy)
 			spawning.spawn()
 			// Reset time
 			this.every *= 0.995
@@ -455,25 +564,29 @@ class RandomEnemySpawner extends EnemySpawner {
 	}
 }
 class WavesEnemySpawner extends EnemySpawner {
-	constructor() {
-		super()
-		this.every = 120*4
+	/**
+	 * @param {Game} game
+	 */
+	constructor(game) {
+		super(game)
+		this.every = 480
 		this.time = this.every - 60
 	}
 	tick() {
 		super.tick()
 		if (this.time >= this.every) {
+			var G = this.game;
 			// Spawn random wave
-			var side = choice(Object.values(Dir))
-			var halves = choice([
+			var side = Utils.choice(Object.values(Dir))
+			var halves = Utils.choice([
 				{ low: true, high: true },
 				{ low: true, high: false },
 				{ low: false, high: true }
 			])
 			var density = 2/3
-			for (var n = 0; n < BOARD_SIZE * density; n++) {
+			for (var n = 0; n < Game.BOARD_SIZE * density; n++) {
 				// Check half is correct
-				var half = n/density < BOARD_SIZE * 0.5
+				var half = n/density < Game.BOARD_SIZE * 0.5
 				if (half) {
 					if (!halves.low) continue
 				} else {
@@ -482,8 +595,8 @@ class WavesEnemySpawner extends EnemySpawner {
 				// Find location and spawn
 				var x = side.x == 0 ? n/density : 0
 				var y = side.y == 0 ? n/density : 0
-				var e = new OrangeArrow(x, y, side.vector)
-				var spawning = new Spawning(e)
+				var e = new OrangeArrow(G, x, y, side.vector)
+				var spawning = new Spawning(G, e)
 				spawning.spawn()
 			}
 			// Reset time
@@ -494,35 +607,35 @@ class WavesEnemySpawner extends EnemySpawner {
 			}
 			if (this.every <= 240) {
 				// Bonus pink square (near one of the corners)
-				var x = anti_ease(Math.random()) * BOARD_SIZE
-				var y = anti_ease(Math.random()) * BOARD_SIZE
-				var e2 = new PinkSquares(x, y)
-				var spawning = new Spawning(e2)
+				var x = anti_ease(Math.random()) * Game.BOARD_SIZE
+				var y = anti_ease(Math.random()) * Game.BOARD_SIZE
+				var e2 = new PinkSquares(G, x, y)
+				var spawning = new Spawning(G, e2)
 				spawning.spawn()
 			}
 			if (this.every <= 200) {
 				// Bonus blue diamond (in one of the corners)
-				var x = Math.round(Math.random()) * BOARD_SIZE
-				var y = Math.round(Math.random()) * BOARD_SIZE
-				var e3 = new BlueDiamond(x, y)
-				var spawning = new Spawning(e3)
+				var x = Math.round(Math.random()) * Game.BOARD_SIZE
+				var y = Math.round(Math.random()) * Game.BOARD_SIZE
+				var e3 = new BlueDiamond(G, x, y)
+				var spawning = new Spawning(G, e3)
 				spawning.spawn()
 			}
 			if (this.every < 140) {
 				// More bonus pink squares
 				for (var i = 0; i < 4; i++) {
-					var x = Math.random() * BOARD_SIZE
-					var y = Math.random() * BOARD_SIZE
-					var e4 = new PinkSquares(x, y)
-					var spawning = new Spawning(e4)
+					var x = Math.random() * Game.BOARD_SIZE
+					var y = Math.random() * Game.BOARD_SIZE
+					var e4 = new PinkSquares(G, x, y)
+					var spawning = new Spawning(G, e4)
 					spawning.spawn()
 				}
 				// More bonus blue diamonds
 				for (var i = 0; i < 4; i++) {
-					var x = Math.round(Math.random()) * BOARD_SIZE
-					var y = Math.round(Math.random()) * BOARD_SIZE
-					var e5 = new BlueDiamond(x, y)
-					var spawning = new Spawning(e5)
+					var x = Math.round(Math.random()) * Game.BOARD_SIZE
+					var y = Math.round(Math.random()) * Game.BOARD_SIZE
+					var e5 = new BlueDiamond(G, x, y)
+					var spawning = new Spawning(G, e5)
 					spawning.spawn()
 				}
 			}
@@ -530,13 +643,16 @@ class WavesEnemySpawner extends EnemySpawner {
 	}
 }
 class PacifismEnemySpawner extends EnemySpawner {
-	constructor() {
-		super()
+	/**
+	 * @param {Game} game
+	 */
+	constructor(game) {
+		super(game)
 		this.every = 240
 		this.time += this.every
 		this.amt = 3
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
+		for (var i = 0; i < game.objects.length; i++) {
+			var e = game.objects[i]
 			if (! (e instanceof Player)) continue;
 			e.canShoot = false;
 		}
@@ -544,25 +660,26 @@ class PacifismEnemySpawner extends EnemySpawner {
 	tick() {
 		super.tick()
 		if (this.time >= this.every) {
-			var x = Math.round(Math.random()) * BOARD_SIZE;
-			var y = Math.round(Math.random()) * BOARD_SIZE;
+			var G = this.game;
+			var x = Math.round(Math.random()) * Game.BOARD_SIZE;
+			var y = Math.round(Math.random()) * Game.BOARD_SIZE;
 			for (var i = 0; i < this.amt; i++) {
 				// move pos
 				x += (Math.random() - 0.5) * 2 * 5;
 				y += (Math.random() - 0.5) * 2 * 5;
 				// clamp pos
 				if (x < 0) x = 0;
-				if (x > BOARD_SIZE) x = BOARD_SIZE;
+				if (x > Game.BOARD_SIZE) x = Game.BOARD_SIZE;
 				if (y < 0) y = 0;
-				if (y > BOARD_SIZE) y = BOARD_SIZE;
+				if (y > Game.BOARD_SIZE) y = Game.BOARD_SIZE;
 				// spawn enemy
-				var newEnemy = new BlueDiamond(x, y);
-				var spawning = new Spawning(newEnemy)
+				var newEnemy = new BlueDiamond(G, x, y);
+				var spawning = new Spawning(G, newEnemy)
 				spawning.spawn()
 			}
 			for (var i = 0; i < 1; i++) {
-				var newEnemy2 = new Barbell(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE);
-				var spawning = new Spawning(newEnemy2)
+				var newEnemy2 = new Barbell(G, Math.random() * Game.BOARD_SIZE, Math.random() * Game.BOARD_SIZE);
+				var spawning = new Spawning(G, newEnemy2)
 				spawning.spawn()
 			}
 			// Reset time
@@ -572,28 +689,32 @@ class PacifismEnemySpawner extends EnemySpawner {
 	}
 }
 class ChallengeEnemySpawner extends EnemySpawner {
-	constructor() {
-		super()
+	/**
+	 * @param {Game} game
+	 */
+	constructor(game) {
+		super(game)
 		this.every = 60
 	}
 	tick() {
 		super.tick()
 		if (this.time >= this.every) {
+			var G = this.game;
 			/** @type {{ item: (x: number, y: number) => Enemy, chance: number }[]} */
 			var choices = [
-				{ item: (x, y) => new BlueDiamond(x, y), chance: 0.1 },
-				{ item: (x, y) => new PinkSquares(x, y), chance: 0.1 },
-				{ item: (x, y) => new Pinwheel(x, y),    chance: 0.1 },
-				{ item: (x, y) => new OrangeArrow(x, y,
-					choice(Object.values(Dir)).vector),  chance: 0.5 },
-				{ item: (x, y) => new PurpleBox(x, y),   chance: 0.25 },
-				{ item: (x, y) => new GreenSquare(x, y), chance: 0.125 },
-				{ item: (x, y) => new Barbell(x, y), chance: 0.01 }
+				{ item: (x, y) => new BlueDiamond(G, x, y), chance: 0.1 },
+				{ item: (x, y) => new PinkSquares(G, x, y), chance: 0.1 },
+				{ item: (x, y) => new Pinwheel(G, x, y),    chance: 0.1 },
+				{ item: (x, y) => new OrangeArrow(G, x, y,
+					Utils.choice(Object.values(Dir)).vector),  chance: 0.5 },
+				{ item: (x, y) => new PurpleBox(G, x, y),   chance: 0.25 },
+				{ item: (x, y) => new GreenSquare(G, x, y), chance: 0.125 },
+				{ item: (x, y) => new Barbell(G, x, y), chance: 0.01 }
 			]
 			for (var i = 0; i < choices.length; i++) {
 				if (Math.random() > choices[i].chance) continue
-				var newEnemy = choices[i].item(Math.random() * BOARD_SIZE, Math.random() * BOARD_SIZE);
-				var spawning = new Spawning(newEnemy)
+				var newEnemy = choices[i].item(Math.random() * Game.BOARD_SIZE, Math.random() * Game.BOARD_SIZE);
+				var spawning = new Spawning(G, newEnemy)
 				spawning.spawn()
 			}
 			// Reset time
@@ -605,13 +726,14 @@ class ChallengeEnemySpawner extends EnemySpawner {
 class Spawning extends LineObject {
 	static spawnTime = 30;
 	/**
+	 * @param {Game} game
 	 * @param {LineObject} enemy
 	 */
-	constructor(enemy) {
-		super(enemy.pos.x, enemy.pos.y)
+	constructor(game, enemy) {
+		super(game, enemy.pos.x, enemy.pos.y)
 		this.enemy = enemy
 		// update mesh
-		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
+		this.mesh = Utils.createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.copy(enemy.mesh.position);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 		this.mesh.rotation.set(
@@ -623,8 +745,8 @@ class Spawning extends LineObject {
 		this.time = 0
 		// camera for player
 		if (enemy instanceof Player) {
-			camera.position.x = this.pos.x
-			camera.position.z = this.pos.y
+			this.game.scene.camera.position.x = this.pos.x
+			this.game.scene.camera.position.z = this.pos.y
 		}
 	}
 	getGeometry() { return []; }
@@ -635,10 +757,10 @@ class Spawning extends LineObject {
 			this.remove();
 		} else if (this.time % Spawning.spawnTime == 0) {
 			if (this.enemy instanceof Barbell) {
-				(new SpawnWarning(this.enemy.halfLeft)).spawn();
-				(new SpawnWarning(this.enemy.halfRight)).spawn();
+				(new SpawnWarning(this.game, this.enemy.halfLeft)).spawn();
+				(new SpawnWarning(this.game, this.enemy.halfRight)).spawn();
 			} else {
-				(new SpawnWarning(this.enemy)).spawn();
+				(new SpawnWarning(this.game, this.enemy)).spawn();
 			}
 		}
 		this.time += 1;
@@ -646,13 +768,14 @@ class Spawning extends LineObject {
 }
 class SpawnWarning extends LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {LineObject} enemy
 	 */
-	constructor(enemy) {
-		super(enemy.pos.x, enemy.pos.y)
+	constructor(game, enemy) {
+		super(game, enemy.pos.x, enemy.pos.y)
 		this.enemy = enemy
 		// update mesh
-		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
+		this.mesh = Utils.createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.copy(enemy.mesh.position);
 		this.mesh.scale.set(0.3, 0.3, 0.3);
 		this.mesh.rotation.set(
@@ -674,15 +797,16 @@ class SpawnWarning extends LineObject {
 		}
 	}
 }
-class DeathIndicator extends LineObject {
+class DeathCauseIndicator extends LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {LineObject} enemy
 	 */
-	constructor(enemy) {
-		super(enemy.pos.x, enemy.pos.y)
+	constructor(game, enemy) {
+		super(game, enemy.pos.x, enemy.pos.y)
 		this.enemy = enemy
 		// update mesh
-		this.mesh = createMeshFromLines(enemy.lines, enemy.getColor())
+		this.mesh = Utils.createMeshFromLines(enemy.lines, enemy.getColor())
 		this.mesh.position.set(this.pos.x, 0, this.pos.y);
 		this.mesh.scale.set(
 			enemy.mesh.scale.x,
@@ -714,15 +838,17 @@ class DeathIndicator extends LineObject {
 }
 class Rice extends LineObject {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.vx = Math.random() - 0.5
 		this.vy = Math.random() - 0.5
 		this.vr = Math.random() - 0.5
 		this.time = 0
+		this.important = false;
 	}
 	getGeometry() {
 		const R = 0.5;
@@ -737,16 +863,17 @@ class Rice extends LineObject {
 		return 0x00FF33;
 	}
 	tick() {
-		if (this.time > 0) {
-			for (var i = 0; i < objects.length; i++) {
-				var e = objects[i]
+		// Check for pickup
+		if (this.time > 1) {
+			for (var i = 0; i < this.game.objects.length; i++) {
+				var e = this.game.objects[i]
 				if (! (e instanceof Player)) continue;
 				var d = dist(this.pos, e.pos)
 				if (d < 1.5) {
 					// Pickup
 					this.remove()
-					multiplier += 1;
-					(new RiceCollection(this.pos.x, this.pos.y, this.mesh.rotation.y, e)).spawn();
+					this.game.points.multiplier += 1;
+					(new RiceCollection(this.game, this.pos.x, this.pos.y, this.mesh.rotation.y, e)).spawn();
 				}
 			}
 		}
@@ -755,11 +882,12 @@ class Rice extends LineObject {
 		this.pos.y += this.vy * 0.01;
 		// limits
 		if (this.pos.x < 0) this.pos.x = 0;
-		if (this.pos.x > BOARD_SIZE) this.pos.x = BOARD_SIZE;
+		if (this.pos.x > Game.BOARD_SIZE) this.pos.x = Game.BOARD_SIZE;
 		if (this.pos.y < 0) this.pos.y = 0;
-		if (this.pos.y > BOARD_SIZE) this.pos.y = BOARD_SIZE;
+		if (this.pos.y > Game.BOARD_SIZE) this.pos.y = Game.BOARD_SIZE;
 		// time
 		this.time += 1
+		if (this.time >= 375) this.mesh.visible = this.time % 2 == 0
 		if (this.time >= 450) {
 			this.destroy()
 		}
@@ -770,23 +898,19 @@ class Rice extends LineObject {
 	}
 	destroy() {
 		this.remove()
-		for (var i = 0; i < this.lines.length; i++) {
-			var p = new DeathParticle(this.mesh.position.x, this.mesh.position.z, this.lines[i], this.getColor(), this.mesh.rotation.x, this.mesh.rotation.y, this.mesh.rotation.z)
-			p.spawn()
-			p.av *= 4;
-		}
 	}
 }
 class RiceCollection extends Rice {
 	maxTime = 10
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 * @param {number} r
 	 * @param {Player} target
 	 */
-	constructor(x, y, r, target) {
-		super(x, y)
+	constructor(game, x, y, r, target) {
+		super(game, x, y)
 		this.mesh.rotation.y = r
 		this.target = target
 	}
@@ -794,7 +918,9 @@ class RiceCollection extends Rice {
 		// time
 		this.time += 1
 		if (this.time >= this.maxTime) {
-			this.remove()
+			try {
+				this.remove()
+			} catch {}
 		}
 		// find pos
 		var targetX = this.target.pos.x;
@@ -812,8 +938,8 @@ class RiceCollection extends Rice {
 class Enemy extends LineObject {
 	tick() {
 		// check for collisions
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
+		for (var i = 0; i < this.game.objects.length; i++) {
+			var e = this.game.objects[i]
 			if (e instanceof Player) {
 				var d = dist(this.pos, e.pos)
 				if (d < 0.75) {
@@ -821,7 +947,7 @@ class Enemy extends LineObject {
 					this.destroy(false)
 					e.destroy()
 					// indicator
-					var p = new DeathIndicator(this)
+					var p = new DeathCauseIndicator(this.game, this)
 					p.spawn()
 					// continue
 					i -= 1;
@@ -835,11 +961,12 @@ class Enemy extends LineObject {
 	destroy(hasScore) {
 		super.destroy(hasScore);
 		if (hasScore) {
-			points += multiplier;
+			this.game.points.amount += this.game.points.multiplier;
 			var rice = this.getRiceAmount();
 			for (var i = 0; i < rice; i++) {
-				var r = new Rice(this.pos.x, this.pos.y);
+				var r = new Rice(this.game, this.pos.x, this.pos.y);
 				r.spawn();
+				if (i == 3) r.important = true;
 			}
 		}
 	}
@@ -849,11 +976,12 @@ class Enemy extends LineObject {
 }
 class BlueDiamond extends Enemy {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.switchTime = 0;
 		/** @type {BlueDiamond | Player} */
 		this.target = this;
@@ -887,8 +1015,8 @@ class BlueDiamond extends Enemy {
 			this.switchTime = 5;
 			this.target = this;
 			var targetDist = 1000000;
-			for (var i = 0; i < objects.length; i++) {
-				var obj = objects[i]
+			for (var i = 0; i < this.game.objects.length; i++) {
+				var obj = this.game.objects[i]
 				if (obj == this) continue;
 				if (! (obj instanceof Player)) continue;
 				var d = dist(this.pos, obj.pos)
@@ -913,11 +1041,12 @@ class PinkSquares extends Enemy {
 	animPhase1Time = 60*2.5;
 	animPhase2Time = 60*3.5;
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.animTime = 0
 		this.flipped = false
 		/** @type {Direction} */
@@ -959,11 +1088,11 @@ class PinkSquares extends Enemy {
 		this.animTime += 1;
 		if (this.animTime == 1) {
 			// new direction
-			this.direction = choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
+			this.direction = Utils.choice(['UP', 'DOWN', 'LEFT', 'RIGHT'])
 			if (this.direction == 'UP' && this.pos.y <= 0) this.direction = 'DOWN'
 			if (this.direction == 'LEFT' && this.pos.x <= 0) this.direction = 'RIGHT'
-			if (this.direction == 'DOWN' && this.pos.y >= BOARD_SIZE) this.direction = 'UP'
-			if (this.direction == 'RIGHT' && this.pos.x >= BOARD_SIZE) this.direction = 'LEFT'
+			if (this.direction == 'DOWN' && this.pos.y >= Game.BOARD_SIZE) this.direction = 'UP'
+			if (this.direction == 'RIGHT' && this.pos.x >= Game.BOARD_SIZE) this.direction = 'LEFT'
 		}
 		if (this.animTime > this.animPhase1Time) {
 			// run the animation
@@ -1027,11 +1156,12 @@ class PinkSquares extends Enemy {
 }
 class Pinwheel extends Enemy {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.spinDirection = Math.random() < 0.5 ? -1 : 1
 		this.direction = THREE.Vector2.randomUnitVector_KindaBiasedTowardsDiagonals()
 	}
@@ -1092,10 +1222,10 @@ class Pinwheel extends Enemy {
 		if (this.pos.y <= 0) {
 			this.direction.y = Math.abs(this.direction.y)
 		}
-		if (this.pos.x >= BOARD_SIZE) {
+		if (this.pos.x >= Game.BOARD_SIZE) {
 			this.direction.x = -Math.abs(this.direction.x)
 		}
-		if (this.pos.y >= BOARD_SIZE) {
+		if (this.pos.y >= Game.BOARD_SIZE) {
 			this.direction.y = -Math.abs(this.direction.y)
 		}
 		// set mesh
@@ -1106,12 +1236,13 @@ class Pinwheel extends Enemy {
 }
 class OrangeArrow extends Enemy {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 * @param {ThreeVector2} direction
 	 */
-	constructor(x, y, direction) {
-		super(x, y)
+	constructor(game, x, y, direction) {
+		super(game, x, y)
 		/** @type {ThreeVector2} */
 		this.direction = direction.normalize()
 		/** @type {ThreeVector3} */
@@ -1155,7 +1286,7 @@ class OrangeArrow extends Enemy {
 	getTargetPos() {
 		var box = new THREE.Box3(
 			new THREE.Vector3(0, -1, 0),
-			new THREE.Vector3(BOARD_SIZE, 1, BOARD_SIZE)
+			new THREE.Vector3(Game.BOARD_SIZE, 1, Game.BOARD_SIZE)
 		)
 		var ray = new THREE.Ray(
 			new THREE.Vector3(this.posOriginal.x, 0, this.posOriginal.z),
@@ -1212,11 +1343,12 @@ class OrangeArrow extends Enemy {
 }
 class GreenSquare extends Enemy {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.vx = 0
 		this.vy = 0
 	}
@@ -1258,8 +1390,8 @@ class GreenSquare extends Enemy {
 		var targetDist = 1000000;
 		/** @type {Bullet[]} */
 		var non_targets = []
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
+		for (var i = 0; i < this.game.objects.length; i++) {
+			var e = this.game.objects[i]
 			if (e == this) continue;
 			if (e instanceof Bullet) {
 				non_targets.push(e)
@@ -1300,13 +1432,13 @@ class GreenSquare extends Enemy {
 			this.vy = 0
 			this.pos.y = 0
 		}
-		if (this.pos.x >= BOARD_SIZE) {
+		if (this.pos.x >= Game.BOARD_SIZE) {
 			this.vx = 0
-			this.pos.x = BOARD_SIZE
+			this.pos.x = Game.BOARD_SIZE
 		}
-		if (this.pos.y >= BOARD_SIZE) {
+		if (this.pos.y >= Game.BOARD_SIZE) {
 			this.vy = 0
-			this.pos.y = BOARD_SIZE
+			this.pos.y = Game.BOARD_SIZE
 		}
 		// set mesh
 		this.mesh.position.x = this.pos.x
@@ -1319,11 +1451,12 @@ class GreenSquare extends Enemy {
 }
 class PurpleBox extends Enemy {
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.vx = 0
 		this.vy = 0
 	}
@@ -1361,12 +1494,13 @@ class PurpleBox extends Enemy {
 		/** @type {LineObject} */
 		var target = this;
 		var targetDist = 1000000;
-		for (var i = 0; i < objects.length; i++) {
-			if (objects[i] == this) continue;
-			if (! (objects[i] instanceof Player)) continue;
-			var d = dist(this.pos, objects[i].pos)
+		for (var i = 0; i < this.game.objects.length; i++) {
+			var obj = this.game.objects[i];
+			if (obj == this) continue;
+			if (! (obj instanceof Player)) continue;
+			var d = dist(this.pos, obj.pos)
 			if (d < targetDist) {
-				target = objects[i];
+				target = obj;
 				targetDist = d;
 			}
 		}
@@ -1388,13 +1522,13 @@ class PurpleBox extends Enemy {
 			this.vy = 0
 			this.pos.y = 0
 		}
-		if (this.pos.x >= BOARD_SIZE) {
+		if (this.pos.x >= Game.BOARD_SIZE) {
 			this.vx = 0
-			this.pos.x = BOARD_SIZE
+			this.pos.x = Game.BOARD_SIZE
 		}
-		if (this.pos.y >= BOARD_SIZE) {
+		if (this.pos.y >= Game.BOARD_SIZE) {
 			this.vy = 0
-			this.pos.y = BOARD_SIZE
+			this.pos.y = Game.BOARD_SIZE
 		}
 		// set mesh
 		this.mesh.position.x = this.pos.x
@@ -1408,7 +1542,7 @@ class PurpleBox extends Enemy {
 		super.destroy(hasScore)
 		if (hasScore) {
 			for (var i = 0; i < 3; i++) {
-				var p = new PurpleBoxRemnant(this.pos.x + (Math.random() - 0.5), this.pos.y + (Math.random() - 0.5))
+				var p = new PurpleBoxRemnant(this.game, this.pos.x + (Math.random() - 0.5), this.pos.y + (Math.random() - 0.5))
 				p.spawn();
 			}
 		}
@@ -1420,11 +1554,12 @@ class PurpleBox extends Enemy {
 class PurpleBoxRemnant extends Enemy {
 	radius = 2
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.mesh.scale.set(0.1, 0.1, 0.1)
 		this.deg = Math.random() * 360
 		this.center = {
@@ -1434,7 +1569,7 @@ class PurpleBoxRemnant extends Enemy {
 		this.invunTime = 10
 	}
 	getGeometry() {
-		return new PurpleBox(0, 0).getGeometry()
+		return new PurpleBox(this.game, 0, 0).getGeometry()
 	}
 	getColor() {
 		return 0x8833FF;
@@ -1465,11 +1600,12 @@ class Barbell extends Enemy {
 	static barbellWidth = 9;
 	static streak = 0;
 	/**
+	 * @param {Game} game
 	 * @param {number} x
 	 * @param {number} y
 	 */
-	constructor(x, y) {
-		super(x, y)
+	constructor(game, x, y) {
+		super(game, x, y)
 		this.halfLeft = new BarbellEnd(this)
 		this.halfRight = new BarbellEnd(this)
 		this.tick()
@@ -1480,52 +1616,31 @@ class Barbell extends Enemy {
 		this.halfLeft.spawn()
 		this.halfRight.spawn()
 	}
-	remove() {
-		super.remove()
-		// remove halves
-		this.halfLeft.remove()
-		this.halfRight.remove()
-	}
-	/**
-	 * @param {boolean} hasScore
-	 */
-	destroy(hasScore) {
-		super.destroy(hasScore)
-		// destroy halves
-		this.halfLeft.destroy(false)
-		this.halfRight.destroy(false)
-		// destroy nearby enemies
-		if (hasScore) {
-			// streak
-			const destroyRadius = 5 + (Barbell.streak * 1.5);
-			Barbell.streak += 1;
-			objects.push(new (class StreakTimer extends LineObject {
-				constructor() { super(0, 0); this.time = 0 }
-				getGeometry() { return [] }
-				getColor() { return 0 }
-				tick() { this.time += 1; if (this.time >= 160) this.remove() }
-				remove() { super.remove(); Barbell.streak -= 1; }
-			})())
-			// find objects
-			var thisLine = this.getThisLine()
-			for (var i = 0; i < objects.length; i++) {
-				var e = objects[i]
-				if (! (e instanceof Enemy)) continue
-				if (e instanceof Barbell) continue
-				if (e instanceof BarbellEnd) continue
-				var d = thisLine.distanceToPoint(new THREE.Vector3(e.pos.x, 0, e.pos.y))
-				if (d < destroyRadius) {
-					e.destroy(true)
-					i -= 1;
-				}
-			}
-		}
-	}
 	getGeometry() {
 		return [
 			{
-				from: { x: -Barbell.barbellWidth, y: 0, z: 0 },
-				to:   { x:  Barbell.barbellWidth, y: 0, z: 0 }
+				from: { x: -Barbell.barbellWidth  , y: 0, z: 0 },
+				to:   { x: -Barbell.barbellWidth/3, y: 0, z: 0 }
+			},
+			{
+				from: { x: -Barbell.barbellWidth/3, y: 0, z: 0 },
+				to:   { x:  Barbell.barbellWidth/3, y: 0, z: 0 }
+			},
+			{
+				from: { x: Barbell.barbellWidth/3, y: 0, z: 0 },
+				to:   { x: Barbell.barbellWidth  , y: 0, z: 0 }
+			},
+			{
+				from: { x: -Barbell.barbellWidth  , y: 0, z: 0 },
+				to:   { x: -Barbell.barbellWidth/3, y: 0, z: 0 }
+			},
+			{
+				from: { x: -Barbell.barbellWidth/3, y: 0, z: 0 },
+				to:   { x:  Barbell.barbellWidth/3, y: 0, z: 0 }
+			},
+			{
+				from: { x: Barbell.barbellWidth/3, y: 0, z: 0 },
+				to:   { x: Barbell.barbellWidth  , y: 0, z: 0 }
 			}
 		]
 	}
@@ -1537,8 +1652,8 @@ class Barbell extends Enemy {
 		this.setAllMeshRotationsAndPositions();
 		// check for collisions
 		var thisLine = this.getThisLine()
-		for (var i = 0; i < objects.length; i++) {
-			var e = objects[i]
+		for (var i = 0; i < this.game.objects.length; i++) {
+			var e = this.game.objects[i]
 			if (e instanceof Player) {
 				var d = thisLine.distanceToPoint(new THREE.Vector3(e.pos.x, 0, e.pos.y))
 				if (d < 0.1) {
@@ -1585,13 +1700,52 @@ class Barbell extends Enemy {
 			new THREE.Vector3(this.halfRight.pos.x, 0, this.halfRight.pos.y)
 		)
 	}
+	remove() {
+		super.remove()
+		// destroy halves
+		this.halfLeft.destroy(false)
+		this.halfRight.destroy(false)
+	}
+	/**
+	 * @param {boolean} hasScore
+	 */
+	destroy(hasScore) {
+		super.destroy(hasScore)
+		// destroy nearby enemies
+		if (hasScore) {
+			// streak
+			const destroyRadius = 5 + (Barbell.streak * 1.5);
+			Barbell.streak += 1;
+			this.game.objects.push(new (class StreakTimer extends LineObject {
+				constructor(/** @type {Game} */ game) { super(game, 0, 0); this.time = 0 }
+				getGeometry() { return [] }
+				getColor() { return 0 }
+				tick() { this.time += 1; if (this.time >= 160) this.remove() }
+				remove() { super.remove(); Barbell.streak -= 1; }
+			})(this.game))
+			// find objects
+			var thisLine = this.getThisLine()
+			for (var i = 0; i < this.game.objects.length; i++) {
+				var e = this.game.objects[i]
+				if (! (e instanceof Enemy)) continue
+				if (e instanceof Barbell) continue
+				if (e instanceof BarbellEnd) continue
+				var d = thisLine.distanceToPoint(new THREE.Vector3(e.pos.x, 0, e.pos.y))
+				if (d < destroyRadius) {
+					e.destroy(true)
+					i -= 1;
+				}
+			}
+		}
+	}
+	getRiceAmount() { return 4; }
 }
 class BarbellEnd extends Enemy {
 	/**
 	 * @param {Barbell} barbell
 	 */
 	constructor(barbell) {
-		super(barbell.pos.x, barbell.pos.y)
+		super(barbell.game, barbell.pos.x, barbell.pos.y)
 		this.src = barbell
 		this.v = THREE.Vector2.randomUnitVector_KindaBiasedTowardsDiagonals();
 		this.pos.x += this.v.x * 0.015;
@@ -1637,10 +1791,10 @@ class BarbellEnd extends Enemy {
 		if (this.pos.y <= 0) {
 			this.v.y = Math.abs(this.v.y)
 		}
-		if (this.pos.x >= BOARD_SIZE) {
+		if (this.pos.x >= Game.BOARD_SIZE) {
 			this.v.x = -Math.abs(this.v.x)
 		}
-		if (this.pos.y >= BOARD_SIZE) {
+		if (this.pos.y >= Game.BOARD_SIZE) {
 			this.v.y = -Math.abs(this.v.y)
 		}
 		// update mesh pos
@@ -1651,65 +1805,36 @@ class BarbellEnd extends Enemy {
 		this.mesh.position.x = this.pos.x
 		this.mesh.position.z = this.pos.y
 	}
+	getRiceAmount() { return 0; }
 }
-(new Grid(0, 0)).spawn();
-(new Player(BOARD_SIZE / 2, BOARD_SIZE / 2)).spawn();
 
-/** @type {Object<string, { highScore: number, spawner: () => EnemySpawner }>} */
-var game_modes = {
-	"Evolved": { highScore: 0, spawner: () => new RandomEnemySpawner() },
-	"Waves": { highScore: 0, spawner: () => new WavesEnemySpawner() },
-	"Challenge": { highScore: 0, spawner: () => new ChallengeEnemySpawner() },
-	"Pacifism": { highScore: 0, spawner: () => new PacifismEnemySpawner() }
-};
-/** @type {string | null} */
-var selectedGameMode = null;
-(() => {
-	var modes = Object.keys(game_modes)
-	for (var i = 0; i < modes.length; i++) {
-		var mode = modes[i]
-		var data = game_modes[mode]
-		// Get high score
-		var highScore = (() => {
-			var data = localStorage.getItem("HighScore" + mode)
-			if (data == null) return 0
-			return parseInt(data)
-		})();
-		data.highScore = highScore
-	}
-})();
+class GameModes {
+	/** @type {Object<string, { highScore: number, spawner: (game: Game) => EnemySpawner }>} */
+	static game_modes = {
+		"Evolved": { highScore: 0, spawner: (game) => new RandomEnemySpawner(game) },
+		"Waves": { highScore: 0, spawner: (game) => new WavesEnemySpawner(game) },
+		"Challenge": { highScore: 0, spawner: (game) => new ChallengeEnemySpawner(game) },
+		"Pacifism": { highScore: 0, spawner: (game) => new PacifismEnemySpawner(game) }
+	};
+	/** @type {string | null} */
+	static selectedGameMode = null;
+	static getHighScores() {
+		var modes = Object.keys(GameModes.game_modes)
+		for (var i = 0; i < modes.length; i++) {
+			var mode = modes[i]
+			var data = GameModes.game_modes[mode]
+			// Get high score
+			var highScore = (() => {
+				var data = localStorage.getItem("HighScore" + mode)
+				if (data == null) return 0
+				return parseInt(data)
+			})();
+			data.highScore = highScore
+		}
+	};
+}
+GameModes.getHighScores();
 
-// // Green Square:
-// (() => {
-// 	var frontPoints = [
-// 		// outline
-// 		{ from: { x: 0, y: 0, z: 0 }, to: { x: 6, y: 0, z: 0 } },
-// 		{ from: { x: 6, y: 0, z: 0 }, to: { x: 6, y: 0, z: 6 } },
-// 		{ from: { x: 6, y: 0, z: 6 }, to: { x: 0, y: 0, z: 6 } },
-// 		{ from: { x: 0, y: 0, z: 6 }, to: { x: 0, y: 0, z: 0 } },
-// 		// inside
-// 		{ from: { x: 3, y: 0, z: 0 }, to: { x: 6, y: 0, z: 3 } },
-// 		{ from: { x: 6, y: 0, z: 3 }, to: { x: 3, y: 0, z: 6 } },
-// 		{ from: { x: 3, y: 0, z: 6 }, to: { x: 0, y: 0, z: 3 } },
-// 		{ from: { x: 0, y: 0, z: 3 }, to: { x: 3, y: 0, z: 0 } }
-// 	]
-// 	const geometry = makeBufferGeometryFromLines([
-// 		...frontPoints,
-// 		...frontPoints.map((v) => ({
-// 			from: { x: v.from.x, y: -1.5, z: v.from.z },
-// 			to:   { x: v.to.x,   y: -1.5, z: v.to.z   }
-// 		})),
-// 		...frontPoints.slice(0, 4).map((v) => ({
-// 			from: { x: v.from.x, y: 0,    z: v.from.z },
-// 			to:   { x: v.from.x, y: -1.5, z: v.from.z }
-// 		}))
-// 	]);
-// 	const material = new THREE.LineBasicMaterial( { color: 0x55FF66, linewidth: 1000000000000000 } );
-// 	const lines = new THREE.LineSegments( geometry, material );
-// 	scene.add( lines );
-// 	lines.position.set(0, 0, 5);
-// 	lines.scale.set(0.3, 0.3, 0.3);
-// })();
 // // Black holes:
 // function generateBlackHolePoints() {
 // 	const DEG2RAD = Math.PI / 180;
@@ -1808,89 +1933,12 @@ var selectedGameMode = null;
 // 	lines.scale.set(0.3, 0.3, 0.3);
 // })();
 
-var blurcanvas = (() => {
-	var c = document.querySelector("#blurcanvas")
-	if (c == null) throw new Error("can't find the blur canvas")
-	if (! (c instanceof HTMLCanvasElement)) throw new Error("blur canvas is not a canvas")
-	c.width = window.innerWidth
-	c.height = window.innerHeight
-	// get context
-	var r = c.getContext('2d')
-	if (r == null) throw new Error("canvas has wrong rendering context...?!")
-	return r
-})();
-
-function doTick() {
-	// scene
-	for (var e of [...objects]) {
-		e.tick();
-	}
-}
-function updateRender() {
-	// render
-	renderer.render( scene, camera );
-	blurcanvas.fillStyle = "black"
-	blurcanvas.fillRect(0, 0, window.innerWidth, window.innerHeight)
-	blurcanvas.drawImage(renderer.domElement, 0, 0)
-	// score
-	if (selectedGameMode == null) {
-		pointsDisplay.innerHTML = `<div style="padding-top: 1em;">Select Game Mode:</div>` + Object.keys(game_modes).map((v) =>
-			`<button onmousedown="selectedGameMode = '${v}'; game_modes[selectedGameMode].spawner().spawn()">${v}</button> (high score: ${game_modes[v].highScore})`).join("<br>");
-	} else {
-		var highScore = game_modes[selectedGameMode].highScore
-		pointsDisplay.innerHTML = `Points: ${points}<br><small>x${multiplier}</small><br><small>High score: ${highScore}</small>`
-	}
-}
-
-var frameTime = 0
-var fixTime = 0
-function animate() {
-	fixTime += 1
-	if (fixTime >= 20) {
-		fixTime = 0
-		// fix scene
-		for (var e of [...scene.children]) {
-			scene.remove(e)
-		}
-		for (var o of [...objects]) {
-			scene.add(o.mesh)
-		}
-	}
-	// touch loc alias
-	if (touchLoc != null) {
-		window.dispatchEvent(new MouseEvent("mousemove", {
-			clientX: touchLoc.x,
-			clientY: touchLoc.y
-		}))
-	}
-	// default frame rate = 120
-	frameTime += 120 / frameRate
-	while (frameTime > 1) {
-		frameTime -= 1
-		doTick()
-	}
-	updateRender()
-	// Animation loop
-	requestAnimationFrame(animate)
-}
-requestAnimationFrame(animate)
-
 // Key listeners
 window.addEventListener("keydown", (e) => {
 	keys.add(e.key)
 })
 window.addEventListener("keyup", (e) => {
 	keys.delete(e.key)
-})
-window.addEventListener("mousemove", (e) => {
-	// find player
-	var s = [...objects]
-	for (var i = 0; i < s.length; i++) {
-		var o = s[i];
-		if (o instanceof Player) {
-			o.shoot(e.clientX, e.clientY)
-		}
-	}
 })
 
 // touches
